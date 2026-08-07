@@ -1,0 +1,13 @@
+Package: AGTIO Motion Controller API
+Library: AG_Motion
+Version: 8.2.1 (from supplied directory naming and AAMotion.dll version metadata)
+Vendor: AGTIO
+Source: Vendor SDK files supplied locally; original installer/archive path is not recorded.
+Artifact type: MSVC x64 import libraries and Windows runtime DLLs/executable.
+Configurations: Separate Debug and Release artifacts are supplied and have different SHA256 hashes.
+Debug import library SHA256: AC3FA6AD84A1666C380F297D2EE6B4F5BC37B66A5EE05003F8A41556C997A3B6
+Release import library SHA256: 8837C249AF1BF9DB6EBF7EE7D9C9CE888D27E608D05464A14C4998DEDDAFB0FD
+Runtime: AG_Motion.dll plus AAComm.dll, AACommServer.exe, AACommServerAPI.dll, AAMotion.dll, AKBMotion.dll and YamlDotNet.dll.
+Debug runtime: Requires the Debug MSVC runtime (MSVCP140D.dll, VCRUNTIME140D.dll and ucrtbased.dll).
+Header: ExAKBMotion.h is identical in the supplied Debug and Release directories.
+License: Not supplied. Add the matching vendor license before redistributing these artifacts.

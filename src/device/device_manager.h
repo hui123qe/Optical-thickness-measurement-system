@@ -1,0 +1,61 @@
+#pragma once
+
+#include "laser_probe.h"
+
+#include <memory>
+
+#include <QObject>
+
+namespace otms::device {
+
+// Set this before the first call to DeviceManager::instance().
+extern bool g_useVirtualLaserProbe;
+
+class DeviceManager final : public QObject
+{
+    Q_OBJECT
+
+public:
+    static DeviceManager& instance();
+
+    DeviceManager(const DeviceManager&) = delete;
+    DeviceManager& operator=(const DeviceManager&) = delete;
+
+    LaserStatus configureLaserProbe(const LaserProbeConfig& config);
+    [[nodiscard]] LaserProbeConfig laserProbeConfig() const;
+    LaserStatus loadLaserConfiguration(std::uint8_t& programNumber);
+    LaserStatus saveLaserConfiguration(
+        std::uint8_t programNumber,
+        const LaserProbeConfig& config);
+
+    LaserStatus connectLaserEthernet();
+    LaserStatus connectLaserUsb(int deviceId, std::chrono::milliseconds timeout);
+    LaserStatus disconnectLaser();
+    [[nodiscard]] bool isLaserConnected() const noexcept;
+
+    LaserStatus enableLaser();
+    LaserStatus disableLaser();
+    LaserStatus startLaserMeasurement();
+    LaserStatus stopLaserMeasurement();
+    LaserStatus setLaserZero(LaserOutput output);
+    LaserStatus clearLaserZero(LaserOutput output);
+    LaserStatus resetLaserOutput(LaserOutput output);
+    LaserStatus selectLaserProgram(std::uint8_t programNumber);
+    LaserStatus currentLaserProgram(std::uint8_t& programNumber);
+    LaserStatus readLatestLaserMeasurement(LaserMeasurement& measurement);
+    LaserStatus measureLaserOnce(LaserMeasurement& measurement);
+
+signals:
+    void laserConnectionChanged(bool connected, const QString& detail);
+
+private:
+    explicit DeviceManager(QObject* parent = nullptr);
+    LaserStatus observeLaserCommand(const LaserStatus& status);
+
+    std::unique_ptr<ILaserProbe> laserProbe_;
+    LaserEthernetConfig laserEthernetConfig_;
+    bool laserEthernetConfigured_{};
+    bool reportedLaserConnected_{};
+};
+
+} // namespace otms::device

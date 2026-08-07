@@ -1,0 +1,11 @@
+{
+    "schemaVersion": 4,
+    "configurations": {
+        "CSV 虚拟轮廓": {
+            "mode": "csv",
+            "csv": {
+                "filePath": "data/virtual-outline.csv"
+            }
+        }
+    }
+}

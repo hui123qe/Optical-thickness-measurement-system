@@ -1,0 +1,47 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "msvc2022-x64",
+      "displayName": "MSVC 2022 x64 + Qt 6.5.3",
+      "description": "Configure the UI with Visual Studio 2022, x64, and the Qt 6.5.3 MSVC kit.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": {
+          "type": "PATH",
+          "value": "D:/Qt/6.5.3/msvc2019_64"
+        }
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "msvc-debug",
+      "displayName": "Build MSVC x64 Debug",
+      "configurePreset": "msvc2022-x64",
+      "configuration": "Debug",
+      "targets": [
+        "OpticalThicknessUi"
+      ]
+    },
+    {
+      "name": "msvc-release",
+      "displayName": "Build MSVC x64 Release",
+      "configurePreset": "msvc2022-x64",
+      "configuration": "Release",
+      "targets": [
+        "OpticalThicknessUi"
+      ]
+    }
+  ]
+}

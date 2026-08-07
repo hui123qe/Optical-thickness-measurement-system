@@ -1,0 +1,17 @@
+{
+    "schemaVersion": 1,
+    "coordinateTransforms": [
+        {
+            "name": "虚拟方案 A",
+            "rotationDegrees": 180.0,
+            "translationX": 320.0,
+            "translationY": 180.0
+        },
+        {
+            "name": "虚拟方案 B",
+            "rotationDegrees": 90.0,
+            "translationX": 120.0,
+            "translationY": 260.0
+        }
+    ]
+}

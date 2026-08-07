@@ -1,0 +1,12 @@
+Package: KEYENCE CL-3000 Communication Library
+Library: CL3_IF
+Navigator package version: 1.8.0.0 (from supplied directory name)
+DLL file/product version: 1.3.0.0
+Vendor: KEYENCE CORPORATION
+Source: D:/Tool/sdk/cl3000/CL-NavigatorN_1_8_0_0/lib/Lib
+Artifact type: MSVC x64 import library and Windows runtime DLL.
+Configuration: The vendor supplies one x64 binary set shared by Debug and Release samples.
+Import library SHA256: 3428BEFC0A1495D46B48B44FAB0E3A8E0498AFE335DE1BBA9EAABD19FB0874F0
+Runtime DLL SHA256: E186C2A5E7CAEA9A91B883D3FC05EB420CB8985CD55048D141BE38B76ED87745
+Runtime dependencies: MSVCP120.dll and MSVCR120.dll (Visual C++ 2013 x64 Runtime), plus Windows system DLLs.
+License: No standalone license file was present in the supplied SDK. Confirm redistribution rights before release.
