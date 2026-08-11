@@ -130,13 +130,21 @@ MainWindow::MainWindow(QWidget* parent)
 
     otms::device::DeviceManager& deviceManager = otms::device::DeviceManager::instance();
     connect(&deviceManager, &otms::device::DeviceManager::laserConnectionChanged,
-        this, [this](bool connected, const QString&) {
+        this, [this, mainPage](bool connected, const QString&) {
             rightStatus_->setProbeConnectionState(connected);
+            topStatus_->setLaserConnectionState(connected);
+            mainPage->setLaserConnectionState(connected);
             taskExecutor_->setProbeReady(connected);
         });
+    connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementStateChanged,
+        mainPage, &MainPage::setLaserMeasurementState);
     measurementTaskController_ = new MeasurementTaskController(*taskExecutor_, this);
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
         rightStatus_, &RightStatusWidget::setMotionConnectionState);
+    connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
+        topStatus_, &TopStatusWidget::setMotionConnectionState);
+    connect(measurementTaskController_, &MeasurementTaskController::motorPositionChanged,
+        topStatus_, &TopStatusWidget::setMotorPositionMillimeters);
     connect(measurementTaskController_, &MeasurementTaskController::measurementAvailable,
         topStatus_, &TopStatusWidget::setLaserMeasurementMillimeters);
     connect(measurementTaskController_, &MeasurementTaskController::taskLogChanged,
@@ -220,10 +228,14 @@ MainWindow::MainWindow(QWidget* parent)
     navigation->selectPage(0);
 }
 
-void MainWindow::setTaskState(const QString& state, const QString& detail, const QString& styleClass)
+void MainWindow::setTaskState(
+    const QString& state,
+    const QString& detail,
+    const QString&)
 {
-    rightStatus_->setTaskState(state, detail);
-    topStatus_->setRunState(state, styleClass);
+    statusBar()->showMessage(
+        detail.isEmpty() ? state : QStringLiteral("%1：%2").arg(state, detail),
+        5000);
 }
 
 void MainWindow::showPrototypeNotice(const QString& action)

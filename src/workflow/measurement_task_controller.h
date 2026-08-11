@@ -22,6 +22,7 @@ public:
 
 signals:
     void motionConnectionChanged(bool connected);
+    void motorPositionChanged(double xMillimeters, double yMillimeters);
     void measurementAvailable(double measurementMillimeters);
     void taskLogChanged();
     void errorOccurred(const QString& detail);
@@ -38,6 +39,7 @@ private slots:
         int pointIndex,
         const TaskExecutionPoint& point);
     void pollArrival();
+    void pollMotorStatus();
     void measurePoint(
         const QString& taskRunId,
         quint64 executionId,
@@ -61,6 +63,7 @@ private:
     std::shared_ptr<otms::device::IMotionDriver> motionDriver_;
     MeasurementDatabase database_;
     QTimer arrivalPollTimer_;
+    QTimer motorStatusPollTimer_;
     QElapsedTimer arrivalWait_;
     TaskExecutionPoint activePoint_;
     QString activeRunId_;

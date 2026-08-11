@@ -32,6 +32,7 @@ public:
     LaserStatus connectLaserUsb(int deviceId, std::chrono::milliseconds timeout);
     LaserStatus disconnectLaser();
     [[nodiscard]] bool isLaserConnected() const noexcept;
+    [[nodiscard]] bool isLaserMeasuring() const noexcept;
 
     LaserStatus enableLaser();
     LaserStatus disableLaser();
@@ -47,15 +48,18 @@ public:
 
 signals:
     void laserConnectionChanged(bool connected, const QString& detail);
+    void laserMeasurementStateChanged(bool measuring);
 
 private:
     explicit DeviceManager(QObject* parent = nullptr);
     LaserStatus observeLaserCommand(const LaserStatus& status);
+    void setLaserMeasurementState(bool measuring);
 
     std::unique_ptr<ILaserProbe> laserProbe_;
     LaserEthernetConfig laserEthernetConfig_;
     bool laserEthernetConfigured_{};
     bool reportedLaserConnected_{};
+    bool laserMeasuring_{};
 };
 
 } // namespace otms::device

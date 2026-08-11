@@ -18,7 +18,31 @@
 
 namespace {
 
-QFrame* createCoordinateCard(const QString& title, const QStringList& axes)
+QLabel* createValueLabel()
+{
+    QLabel* value = new QLabel(QStringLiteral("--"));
+    value->setProperty("role", "coordinate");
+    value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    value->setMinimumWidth(64);
+    return value;
+}
+
+void addMeasurementRow(
+    QHBoxLayout& layout,
+    const QString& name,
+    const QString& unit,
+    QLabel* value)
+{
+    QLabel* nameLabel = new QLabel(name);
+    nameLabel->setProperty("role", "measurementName");
+    QLabel* unitLabel = new QLabel(unit);
+    unitLabel->setProperty("role", "measurementUnit");
+    layout.addWidget(nameLabel);
+    layout.addWidget(value);
+    layout.addWidget(unitLabel);
+}
+
+QFrame* createMeasurementCard(const QString& title)
 {
     QFrame* card = new QFrame;
     card->setProperty("role", "coordinateCard");
@@ -30,14 +54,6 @@ QFrame* createCoordinateCard(const QString& title, const QStringList& axes)
     titleLabel->setProperty("role", "coordinateTitle");
     cardLayout->addWidget(titleLabel);
 
-    QHBoxLayout* valuesLayout = new QHBoxLayout;
-    valuesLayout->setSpacing(14);
-    for (const QString& axis : axes) {
-        QLabel* value = new QLabel(QStringLiteral("%1  0.000 mm").arg(axis));
-        value->setProperty("role", "coordinate");
-        valuesLayout->addWidget(value);
-    }
-    cardLayout->addLayout(valuesLayout);
     return card;
 }
 
@@ -57,13 +73,9 @@ TopStatusWidget::TopStatusWidget(QWidget* parent)
     systemName->setProperty("role", "systemName");
     layout->addWidget(systemName);
     layout->addStretch();
-    layout->addWidget(createCoordinateCard(QStringLiteral("电机绝对坐标"), {QStringLiteral("X"), QStringLiteral("Y"), QStringLiteral("Z")}));
-    layout->addWidget(createCoordinateCard(QStringLiteral("物料相对坐标"), {QStringLiteral("xw"), QStringLiteral("yw")}));
+    layout->addWidget(createMotorPositionCard());
+    layout->addWidget(createWorkpiecePositionCard());
     layout->addWidget(createLaserMeasurementCard());
-
-    runState_ = WidgetFactory::createStatusBadge(QStringLiteral("就绪"), QStringLiteral("ready"));
-    runState_->setMinimumWidth(74);
-    layout->addWidget(runState_);
 
     QPushButton* emergencyStop = WidgetFactory::createDangerButton(QStringLiteral("急停"));
     emergencyStop->setProperty("emergencyStop", true);
@@ -73,38 +85,84 @@ TopStatusWidget::TopStatusWidget(QWidget* parent)
     layout->addWidget(emergencyStop);
 }
 
-QFrame* TopStatusWidget::createLaserMeasurementCard()
+QFrame* TopStatusWidget::createMotorPositionCard()
 {
-    QFrame* card = new QFrame;
-    card->setProperty("role", "coordinateCard");
-    QVBoxLayout* cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(14, 8, 14, 8);
-    cardLayout->setSpacing(4);
-
-    QLabel* title = new QLabel(QStringLiteral("激光测量"));
-    title->setProperty("role", "coordinateTitle");
-    cardLayout->addWidget(title);
-
-    laserMeasurement_ = new QLabel(QStringLiteral("-- mm"));
-    laserMeasurement_->setProperty("role", "coordinate");
-    cardLayout->addWidget(laserMeasurement_);
+    QFrame* card = createMeasurementCard(QStringLiteral("电机绝对坐标"));
+    QVBoxLayout* cardLayout = qobject_cast<QVBoxLayout*>(card->layout());
+    QHBoxLayout* valuesLayout = new QHBoxLayout;
+    valuesLayout->setSpacing(6);
+    motorXPosition_ = createValueLabel();
+    motorYPosition_ = createValueLabel();
+    addMeasurementRow(*valuesLayout, QStringLiteral("X"), QStringLiteral("mm"), motorXPosition_);
+    valuesLayout->addSpacing(8);
+    addMeasurementRow(*valuesLayout, QStringLiteral("Y"), QStringLiteral("mm"), motorYPosition_);
+    cardLayout->addLayout(valuesLayout);
     return card;
 }
 
-void TopStatusWidget::setRunState(const QString& state, const QString& styleClass)
+QFrame* TopStatusWidget::createWorkpiecePositionCard()
 {
-    runState_->setText(state);
-    runState_->setProperty("state", styleClass);
-    runState_->style()->unpolish(runState_);
-    runState_->style()->polish(runState_);
+    QFrame* card = createMeasurementCard(QStringLiteral("物料相对坐标"));
+    QVBoxLayout* cardLayout = qobject_cast<QVBoxLayout*>(card->layout());
+    QHBoxLayout* valuesLayout = new QHBoxLayout;
+    valuesLayout->setSpacing(6);
+    addMeasurementRow(
+        *valuesLayout, QStringLiteral("xw"), QStringLiteral("mm"), createValueLabel());
+    valuesLayout->addSpacing(8);
+    addMeasurementRow(
+        *valuesLayout, QStringLiteral("yw"), QStringLiteral("mm"), createValueLabel());
+    cardLayout->addLayout(valuesLayout);
+    return card;
+}
+
+QFrame* TopStatusWidget::createLaserMeasurementCard()
+{
+    QFrame* card = createMeasurementCard(QStringLiteral("激光传感器"));
+    QVBoxLayout* cardLayout = qobject_cast<QVBoxLayout*>(card->layout());
+    QHBoxLayout* valuesLayout = new QHBoxLayout;
+    valuesLayout->setSpacing(6);
+    laserMeasurement_ = createValueLabel();
+    addMeasurementRow(
+        *valuesLayout, QStringLiteral("测量值"), QStringLiteral("mm"), laserMeasurement_);
+    cardLayout->addLayout(valuesLayout);
+    return card;
 }
 
 void TopStatusWidget::setLaserMeasurementMillimeters(double measurementMillimeters)
 {
     laserMeasurement_->setText(
-        std::isfinite(measurementMillimeters)
-            ? QStringLiteral("%1 mm").arg(measurementMillimeters, 0, 'f', 3)
-            : QStringLiteral("-- mm"));
+        laserConnected_ && std::isfinite(measurementMillimeters)
+            ? QString::number(measurementMillimeters, 'f', 3)
+            : QStringLiteral("--"));
+}
+
+void TopStatusWidget::setMotionConnectionState(bool connected)
+{
+    motionConnected_ = connected;
+    if (!motionConnected_) {
+        motorXPosition_->setText(QStringLiteral("--"));
+        motorYPosition_->setText(QStringLiteral("--"));
+    }
+}
+
+void TopStatusWidget::setMotorPositionMillimeters(double xMillimeters, double yMillimeters)
+{
+    if (!motionConnected_ || !std::isfinite(xMillimeters) || !std::isfinite(yMillimeters)) {
+        motorXPosition_->setText(QStringLiteral("--"));
+        motorYPosition_->setText(QStringLiteral("--"));
+        return;
+    }
+
+    motorXPosition_->setText(QString::number(xMillimeters, 'f', 3));
+    motorYPosition_->setText(QString::number(yMillimeters, 'f', 3));
+}
+
+void TopStatusWidget::setLaserConnectionState(bool connected)
+{
+    laserConnected_ = connected;
+    if (!laserConnected_) {
+        laserMeasurement_->setText(QStringLiteral("--"));
+    }
 }
 
 NavigationWidget::NavigationWidget(QWidget* parent)
@@ -170,17 +228,6 @@ RightStatusWidget::RightStatusWidget(QWidget* parent)
     deviceLayout->addRow(QStringLiteral("激光探头"), probeState_);
     layout->addWidget(devices);
 
-    QGroupBox* task = new QGroupBox(QStringLiteral("当前任务"));
-    QVBoxLayout* taskLayout = new QVBoxLayout(task);
-    taskState_ = new QLabel(QStringLiteral("等待操作"));
-    taskState_->setProperty("role", "taskState");
-    taskDetail_ = new QLabel(QStringLiteral("界面原型尚未连接业务服务"));
-    taskDetail_->setWordWrap(true);
-    taskDetail_->setProperty("role", "muted");
-    taskLayout->addWidget(taskState_);
-    taskLayout->addWidget(taskDetail_);
-    layout->addWidget(task);
-
     QGroupBox* alert = new QGroupBox(QStringLiteral("报警与提示"));
     QVBoxLayout* alertLayout = new QVBoxLayout(alert);
     QLabel* noAlert = new QLabel(QStringLiteral("当前无活动报警"));
@@ -188,12 +235,6 @@ RightStatusWidget::RightStatusWidget(QWidget* parent)
     alertLayout->addWidget(noAlert);
     layout->addWidget(alert);
     layout->addStretch();
-}
-
-void RightStatusWidget::setTaskState(const QString& state, const QString& detail)
-{
-    taskState_->setText(state);
-    taskDetail_->setText(detail);
 }
 
 void RightStatusWidget::setMotionConnectionState(bool connected)

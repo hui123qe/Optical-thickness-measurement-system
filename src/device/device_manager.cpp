@@ -366,6 +366,7 @@ LaserStatus DeviceManager::connectLaserEthernet()
         std::uint8_t programNumber = 0;
         const LaserStatus configurationStatus = loadLaserConfiguration(programNumber);
         if (!configurationStatus.ok()) {
+            setLaserMeasurementState(false);
             emit laserConnectionChanged(false, configurationStatus.message);
             return configurationStatus;
         }
@@ -373,6 +374,9 @@ LaserStatus DeviceManager::connectLaserEthernet()
 
     const LaserStatus status = laserProbe_->connectEthernet(laserEthernetConfig_);
     reportedLaserConnected_ = laserProbe_->isConnected();
+    if (status.ok() || !reportedLaserConnected_) {
+        setLaserMeasurementState(false);
+    }
     emit laserConnectionChanged(reportedLaserConnected_, status.message);
     return status;
 }
@@ -381,6 +385,9 @@ LaserStatus DeviceManager::connectLaserUsb(int deviceId, std::chrono::millisecon
 {
     const LaserStatus status = laserProbe_->connectUsb(deviceId, timeout);
     reportedLaserConnected_ = laserProbe_->isConnected();
+    if (status.ok() || !reportedLaserConnected_) {
+        setLaserMeasurementState(false);
+    }
     emit laserConnectionChanged(reportedLaserConnected_, status.message);
     return status;
 }
@@ -389,6 +396,9 @@ LaserStatus DeviceManager::disconnectLaser()
 {
     const LaserStatus status = laserProbe_->disconnect();
     reportedLaserConnected_ = laserProbe_->isConnected();
+    if (!reportedLaserConnected_) {
+        setLaserMeasurementState(false);
+    }
     emit laserConnectionChanged(reportedLaserConnected_, status.message);
     return status;
 }
@@ -398,9 +408,17 @@ bool DeviceManager::isLaserConnected() const noexcept
     return laserProbe_->isConnected();
 }
 
+bool DeviceManager::isLaserMeasuring() const noexcept
+{
+    return laserMeasuring_;
+}
+
 LaserStatus DeviceManager::observeLaserCommand(const LaserStatus& status)
 {
     const bool connected = laserProbe_->isConnected();
+    if (!connected) {
+        setLaserMeasurementState(false);
+    }
     if (connected != reportedLaserConnected_) {
         reportedLaserConnected_ = connected;
         emit laserConnectionChanged(connected, status.message);
@@ -415,17 +433,39 @@ LaserStatus DeviceManager::enableLaser()
 
 LaserStatus DeviceManager::disableLaser()
 {
-    return observeLaserCommand(laserProbe_->disableLaser());
+    const LaserStatus status = observeLaserCommand(laserProbe_->disableLaser());
+    if (status.ok()) {
+        setLaserMeasurementState(false);
+    }
+    return status;
 }
 
 LaserStatus DeviceManager::startLaserMeasurement()
 {
-    return observeLaserCommand(laserProbe_->startMeasurement());
+    const LaserStatus status = observeLaserCommand(laserProbe_->startMeasurement());
+    if (status.ok() && isLaserConnected()) {
+        setLaserMeasurementState(true);
+    }
+    return status;
 }
 
 LaserStatus DeviceManager::stopLaserMeasurement()
 {
-    return observeLaserCommand(laserProbe_->stopMeasurement());
+    const LaserStatus status = observeLaserCommand(laserProbe_->stopMeasurement());
+    if (status.ok()) {
+        setLaserMeasurementState(false);
+    }
+    return status;
+}
+
+void DeviceManager::setLaserMeasurementState(bool measuring)
+{
+    if (laserMeasuring_ == measuring) {
+        return;
+    }
+
+    laserMeasuring_ = measuring;
+    emit laserMeasurementStateChanged(laserMeasuring_);
 }
 
 LaserStatus DeviceManager::setLaserZero(LaserOutput output)

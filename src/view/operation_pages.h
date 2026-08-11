@@ -14,6 +14,7 @@ class QDoubleSpinBox;
 class QGroupBox;
 class QHBoxLayout;
 class QLabel;
+class QPushButton;
 class QString;
 class QTabWidget;
 
@@ -30,6 +31,10 @@ class MainPage final : public QWidget
 
 public:
     explicit MainPage(QWidget* parent = nullptr);
+
+public slots:
+    void setLaserConnectionState(bool connected);
+    void setLaserMeasurementState(bool measuring);
 
 signals:
     void stageAxisAbsoluteMoveRequested(MotorAxis axis, double target);
@@ -56,6 +61,7 @@ private:
     QHBoxLayout* createLaserMeasurementControls();
     QTabWidget* createOperationTabs();
     void updateAutomaticMotorPointQueue();
+    void updateLaserMeasurementControls();
 
     QComboBox* transformSelector_{};
     QLabel* transformParameters_{};
@@ -64,6 +70,11 @@ private:
     QList<WorkpieceTaskPoint> automaticWorkpiecePointQueue_;
     QList<TaskExecutionPoint> automaticTaskPointQueue_;
     QTransform workpieceToMotorTransform_;
+    QPushButton* startLaserMeasurement_{};
+    QPushButton* stopLaserMeasurement_{};
+    QLabel* laserMeasurementState_{};
+    bool laserConnected_{};
+    bool laserMeasuring_{};
 };
 
 class ManualControlWidget final : public QWidget

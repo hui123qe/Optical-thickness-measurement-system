@@ -20,6 +20,7 @@ constexpr int ControllerXAxis = 0;
 constexpr int ControllerYAxis = 1;
 constexpr double VirtualCountsPerMillimeter = 1000.0;
 constexpr int ArrivalPollIntervalMs = 20;
+constexpr int MotorStatusPollIntervalMs = 200;
 constexpr qint64 ArrivalTimeoutMs = 10000;
 constexpr double ArrivalToleranceMillimeters = 0.001;
 constexpr int RequiredArrivalSamples = 2;
@@ -52,8 +53,12 @@ MeasurementTaskController::MeasurementTaskController(TaskExecutor& executor, QOb
 {
     arrivalPollTimer_.setInterval(ArrivalPollIntervalMs);
     arrivalPollTimer_.setTimerType(Qt::PreciseTimer);
+    motorStatusPollTimer_.setInterval(MotorStatusPollIntervalMs);
+    motorStatusPollTimer_.setTimerType(Qt::CoarseTimer);
 
     connect(&arrivalPollTimer_, &QTimer::timeout, this, &MeasurementTaskController::pollArrival);
+    connect(&motorStatusPollTimer_, &QTimer::timeout,
+        this, &MeasurementTaskController::pollMotorStatus);
     connect(&executor_, &TaskExecutor::executionStarted,
         this, &MeasurementTaskController::prepareExperiment);
     connect(&executor_, &TaskExecutor::moveRequested,
@@ -68,6 +73,34 @@ MeasurementTaskController::MeasurementTaskController(TaskExecutor& executor, QOb
         this, &MeasurementTaskController::persistTaskLog);
 
     initializeVirtualDevices();
+    motorStatusPollTimer_.start();
+}
+
+void MeasurementTaskController::pollMotorStatus()
+{
+    otms::device::AxisManager& axes = otms::device::AxisManager::instance();
+    int xConnected = 0;
+    int yConnected = 0;
+    const bool connected = axes.isConnected(LogicalXAxis, xConnected) == 1
+        && axes.isConnected(LogicalYAxis, yConnected) == 1
+        && xConnected != 0
+        && yConnected != 0;
+
+    double xPosition = 0.0;
+    double yPosition = 0.0;
+    const bool positionAvailable = connected
+        && axes.getPosition(LogicalXAxis, xPosition) == 1
+        && axes.getPosition(LogicalYAxis, yPosition) == 1;
+    const bool motionAvailable = connected && positionAvailable;
+
+    if (motionReady_ != motionAvailable) {
+        motionReady_ = motionAvailable;
+        executor_.setMotionDeviceReady(databaseReady_ && motionReady_);
+        emit motionConnectionChanged(motionReady_);
+    }
+    if (motionAvailable) {
+        emit motorPositionChanged(xPosition, yPosition);
+    }
 }
 
 void MeasurementTaskController::prepareExperiment(

@@ -45,6 +45,16 @@ QLabel[role="coordinate"] {
     font-weight: 600;
 }
 
+QLabel[role="measurementName"] {
+    color: #40566d;
+    font-weight: 700;
+}
+
+QLabel[role="measurementUnit"] {
+    color: #6b7785;
+    font-size: 12px;
+}
+
 QLabel[role="coordinateTitle"] {
     color: #40566d;
     font-size: 15px;

@@ -15,19 +15,25 @@ class TopStatusWidget final : public QWidget
 public:
     explicit TopStatusWidget(QWidget* parent = nullptr);
 
-    void setRunState(const QString& state, const QString& styleClass);
-
 public slots:
+    void setMotionConnectionState(bool connected);
+    void setMotorPositionMillimeters(double xMillimeters, double yMillimeters);
+    void setLaserConnectionState(bool connected);
     void setLaserMeasurementMillimeters(double measurementMillimeters);
 
 signals:
     void emergencyStopRequested();
 
 private:
+    QFrame* createMotorPositionCard();
+    QFrame* createWorkpiecePositionCard();
     QFrame* createLaserMeasurementCard();
 
+    QLabel* motorXPosition_{};
+    QLabel* motorYPosition_{};
     QLabel* laserMeasurement_{};
-    QLabel* runState_{};
+    bool motionConnected_{};
+    bool laserConnected_{};
 };
 
 class NavigationWidget final : public QWidget
@@ -51,15 +57,12 @@ class RightStatusWidget final : public QWidget
 
 public:
     explicit RightStatusWidget(QWidget* parent = nullptr);
-    void setTaskState(const QString& state, const QString& detail);
     void setMotionConnectionState(bool connected);
     void setProbeConnectionState(bool connected);
 
 private:
     QLabel* motionState_{};
     QLabel* probeState_{};
-    QLabel* taskState_{};
-    QLabel* taskDetail_{};
 };
 
 class BottomStatusBar final : public QStatusBar

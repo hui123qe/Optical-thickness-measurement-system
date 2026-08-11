@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QStyle>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -108,18 +109,61 @@ QGroupBox* MainPage::createCoordinateTransformGroup()
 QHBoxLayout* MainPage::createLaserMeasurementControls()
 {
     QHBoxLayout* layout = new QHBoxLayout;
-    QPushButton* startLaserMeasurement =
+    startLaserMeasurement_ =
         WidgetFactory::createPrimaryButton(QStringLiteral("开始测量"));
-    QPushButton* stopLaserMeasurement = new QPushButton(QStringLiteral("停止测量"));
+    stopLaserMeasurement_ = new QPushButton(QStringLiteral("停止测量"));
+    laserMeasurementState_ =
+        WidgetFactory::createStatusBadge(QStringLiteral("未测量"), QStringLiteral("offline"));
     layout->addWidget(new QLabel(QStringLiteral("激光传感器")));
-   
-    layout->addWidget(startLaserMeasurement);
-    layout->addWidget(stopLaserMeasurement);
+    layout->addWidget(startLaserMeasurement_);
+    layout->addWidget(stopLaserMeasurement_);
+    layout->addSpacing(8);
+    layout->addWidget(new QLabel(QStringLiteral("测量状态")));
+    layout->addWidget(laserMeasurementState_);
     layout->addStretch();
 
-    connect(startLaserMeasurement, &QPushButton::clicked, this, &MainPage::laserMeasurementStartRequested);
-    connect(stopLaserMeasurement, &QPushButton::clicked, this, &MainPage::laserMeasurementStopRequested);
+    connect(startLaserMeasurement_, &QPushButton::clicked,
+        this, &MainPage::laserMeasurementStartRequested);
+    connect(stopLaserMeasurement_, &QPushButton::clicked,
+        this, &MainPage::laserMeasurementStopRequested);
+    updateLaserMeasurementControls();
     return layout;
+}
+
+void MainPage::setLaserConnectionState(bool connected)
+{
+    laserConnected_ = connected;
+    if (!laserConnected_) {
+        laserMeasuring_ = false;
+    }
+    updateLaserMeasurementControls();
+}
+
+void MainPage::setLaserMeasurementState(bool measuring)
+{
+    laserMeasuring_ = laserConnected_ && measuring;
+    updateLaserMeasurementControls();
+}
+
+void MainPage::updateLaserMeasurementControls()
+{
+    if (startLaserMeasurement_ == nullptr
+        || stopLaserMeasurement_ == nullptr
+        || laserMeasurementState_ == nullptr) {
+        return;
+    }
+
+    startLaserMeasurement_->setEnabled(laserConnected_ && !laserMeasuring_);
+    stopLaserMeasurement_->setEnabled(laserConnected_ && laserMeasuring_);
+    laserMeasurementState_->setText(
+        laserMeasuring_ ? QStringLiteral("测量中") : QStringLiteral("未测量"));
+    laserMeasurementState_->setProperty(
+        "state",
+        !laserConnected_
+            ? QStringLiteral("offline")
+            : laserMeasuring_ ? QStringLiteral("ready") : QStringLiteral("waiting"));
+    laserMeasurementState_->style()->unpolish(laserMeasurementState_);
+    laserMeasurementState_->style()->polish(laserMeasurementState_);
 }
 
 QTabWidget* MainPage::createOperationTabs()
