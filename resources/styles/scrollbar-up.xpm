@@ -1,0 +1,11 @@
+/* XPM */
+static const char* scrollbar_up_xpm[] = {
+    "7 5 2 1",
+    "  c None",
+    ". c #40566D",
+    "   .   ",
+    "  ...  ",
+    " ..... ",
+    ".......",
+    "       "
+};

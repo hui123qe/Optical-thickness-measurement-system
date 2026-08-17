@@ -123,6 +123,8 @@ AutomaticOperationWidget::AutomaticOperationWidget(QWidget* parent)
     circleLayout->addRow(QStringLiteral("单圈覆盖设置"), circleOverrideEditor);
 
     circleRingOverrides_ = new QTableWidget;
+    circleRingOverrides_->setObjectName(QStringLiteral("circleRingOverrides"));
+    circleRingOverrides_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
     circleRingOverrides_->setColumnCount(2);
     circleRingOverrides_->setHorizontalHeaderLabels(
         {QStringLiteral("圆环序号"), QStringLiteral("覆盖点数")});
@@ -132,7 +134,7 @@ AutomaticOperationWidget::AutomaticOperationWidget(QWidget* parent)
     circleRingOverrides_->setSelectionMode(QAbstractItemView::SingleSelection);
     circleRingOverrides_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     circleRingOverrides_->setAlternatingRowColors(true);
-    circleRingOverrides_->setMinimumHeight(130);
+    circleRingOverrides_->setMinimumHeight(300);
     circleLayout->addRow(QStringLiteral("已设置覆盖"), circleRingOverrides_);
     modeConfiguration_->addWidget(circlePage);
 

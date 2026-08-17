@@ -193,6 +193,16 @@ QGroupBox::title {
     color: #30445a;
 }
 
+QWidget[deviceConnectionArea="true"] {
+    border: 1px solid transparent;
+    border-radius: 6px;
+}
+
+QWidget[deviceConnectionArea="true"]:hover {
+    border-color: #2f83bb;
+    background: #f7fbfe;
+}
+
 QPushButton {
     background: #ffffff;
     border: 1px solid #cbd5df;
@@ -310,6 +320,57 @@ QTableWidget {
     gridline-color: #e5eaef;
     selection-background-color: #dcecf8;
     selection-color: #183c5c;
+}
+
+QTableWidget#circleRingOverrides QScrollBar:vertical {
+    background: #eef2f6;
+    border: 1px solid #cbd5df;
+    margin: 18px 0 18px 0;
+    width: 18px;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::handle:vertical {
+    background: #94a9bc;
+    border-radius: 4px;
+    margin: 2px;
+    min-height: 24px;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::handle:vertical:disabled {
+    background: #cbd5df;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::sub-line:vertical,
+QTableWidget#circleRingOverrides QScrollBar::add-line:vertical {
+    background: #f7f9fb;
+    border: 1px solid #cbd5df;
+    height: 18px;
+    subcontrol-origin: margin;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::sub-line:vertical {
+    subcontrol-position: top;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::add-line:vertical {
+    subcontrol-position: bottom;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::up-arrow:vertical {
+    image: url(:/styles/scrollbar-up.xpm);
+    height: 5px;
+    width: 7px;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::down-arrow:vertical {
+    image: url(:/styles/scrollbar-down.xpm);
+    height: 5px;
+    width: 7px;
+}
+
+QTableWidget#circleRingOverrides QScrollBar::sub-page:vertical,
+QTableWidget#circleRingOverrides QScrollBar::add-page:vertical {
+    background: transparent;
 }
 
 QHeaderView::section {

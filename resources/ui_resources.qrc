@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/styles">
         <file alias="application.qss">styles/application.qss</file>
+        <file alias="scrollbar-up.xpm">styles/scrollbar-up.xpm</file>
+        <file alias="scrollbar-down.xpm">styles/scrollbar-down.xpm</file>
     </qresource>
 </RCC>
