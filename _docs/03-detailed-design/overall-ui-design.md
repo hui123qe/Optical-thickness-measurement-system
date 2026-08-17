@@ -17,12 +17,14 @@ code_refs:
   - ../../src/main.cpp
   - ../../src/main_window.h
   - ../../src/main_window.cpp
+  - ../../src/view/automatic_operation_widget.cpp
+  - ../../resources/styles/application.qss
 config_refs:
   - ../../CMakeLists.txt
   - ../../CMakePresets.json
 
 created: 2026-07-28
-updated: 2026-07-30
+updated: 2026-08-11
 summary: 基于 Qt 6.5.3 设计主界面和日志两类入口，以及顶部/右侧/底部常驻状态区。
 ---
 
@@ -255,6 +257,20 @@ MainWindow
 - 主要动作使用文字按钮，不只依赖图标。
 - 运动和测量操作与普通页面切换在视觉上区分。
 - 禁用状态必须可辨识，并提供必要原因。
+
+### 滚动条可见性约束
+
+- 该表格的垂直滚动条固定使用 `Qt::ScrollBarAlwaysOn`，不以当前行数决定是否显示；
+- 滚动条轨道、滑块和上下按钮仅使用控件专属样式，不改变其他表格；
+- 上下箭头使用应用资源中的固定图形，不依赖操作系统是否绘制原生箭头；
+- 没有可滚动内容时允许滚动条处于禁用状态，但完整轨道和上下按钮仍需可见；
+- 两列宽度继续随表格宽度拉伸，水平滚动条保持按需显示。
+
+实现位置为 `AutomaticOperationWidget::AutomaticOperationWidget()`、
+`resources/styles/application.qss` 和 `resources/ui_resources.qrc`。
+基础滚动条策略和样式已实现，2026-08-11 通过 MSVC x64 Debug clean build；
+但界面仍复现底部箭头不可见，问题尚未关闭。问题现象、原因和已撤回方案见
+[OTMS-DBG-002 圆环覆盖表格滚动条和箭头不能持续显示](../04-debugging/circle-override-scrollbar-visibility.md)。
 
 ## 9. 状态设计
 
