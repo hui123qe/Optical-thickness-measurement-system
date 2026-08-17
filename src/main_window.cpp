@@ -1,5 +1,7 @@
 #include "main_window.h"
 
+#include "motor/motion_controller_manager.h"
+
 #include "device/device_manager.h"
 #include "workflow/measurement_task_controller.h"
 #include "workflow/task_executor.h"
@@ -8,8 +10,15 @@
 #include "view/operation_pages.h"
 #include "view/status_widgets.h"
 
+#include <limits>
+
 #include <QHBoxLayout>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QGroupBox>
+#include <QLabel>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QStackedWidget>
 #include <QString>
 #include <QVBoxLayout>
@@ -28,6 +37,19 @@ QString motorAxisName(MotorAxis axis)
         return QStringLiteral("Z");
     }
     return QStringLiteral("未知");
+}
+
+otms::device::LogicalAxis logicalAxis(MotorAxis axis)
+{
+    switch (axis) {
+    case MotorAxis::X:
+        return otms::device::LogicalAxis::X;
+    case MotorAxis::Y:
+        return otms::device::LogicalAxis::Y;
+    case MotorAxis::Z:
+        return otms::device::LogicalAxis::Z;
+    }
+    return otms::device::LogicalAxis::X;
 }
 
 QString taskExecutionStateName(
@@ -138,7 +160,27 @@ MainWindow::MainWindow(QWidget* parent)
         });
     connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementStateChanged,
         mainPage, &MainPage::setLaserMeasurementState);
-    measurementTaskController_ = new MeasurementTaskController(*taskExecutor_, this);
+    connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementUpdated,
+        this, [this](const otms::device::LaserMeasurement& measurement) {
+            const double measurementMillimeters =
+                measurement.quality == otms::device::MeasurementQuality::Valid
+                ? measurement.valueMicrometers / 1000.0
+                : std::numeric_limits<double>::quiet_NaN();
+            topStatus_->setLaserMeasurementMillimeters(measurementMillimeters);
+        });
+    const bool laserConnected = deviceManager.isLaserConnected();
+    rightStatus_->setProbeConnectionState(laserConnected);
+    topStatus_->setLaserConnectionState(laserConnected);
+    mainPage->setLaserConnectionState(laserConnected);
+    taskExecutor_->setProbeReady(laserConnected);
+
+    otms::device::MotionControllerManager& motionControllers =
+        otms::device::MotionControllerManager::instance();
+    measurementTaskController_ = new MeasurementTaskController(
+        *taskExecutor_,
+        motionControllers,
+        deviceManager,
+        this);
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
         rightStatus_, &RightStatusWidget::setMotionConnectionState);
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
@@ -147,12 +189,25 @@ MainWindow::MainWindow(QWidget* parent)
         topStatus_, &TopStatusWidget::setMotorPositionMillimeters);
     connect(measurementTaskController_, &MeasurementTaskController::measurementAvailable,
         topStatus_, &TopStatusWidget::setLaserMeasurementMillimeters);
+    connect(measurementTaskController_, &MeasurementTaskController::doorLockStateChanged,
+        rightStatus_, &RightStatusWidget::setDoorLockState);
+    connect(measurementTaskController_, &MeasurementTaskController::lightCurtainStateChanged,
+        rightStatus_, &RightStatusWidget::setLightCurtainState);
+    connect(measurementTaskController_, &MeasurementTaskController::machineStateChanged,
+        rightStatus_, &RightStatusWidget::setMachineState);
     connect(measurementTaskController_, &MeasurementTaskController::taskLogChanged,
         logPage, &LogPage::refresh);
     connect(measurementTaskController_, &MeasurementTaskController::errorOccurred,
         this, [this](const QString& detail) {
             setTaskState(QStringLiteral("执行异常"), detail, QStringLiteral("terminated"));
         });
+    connect(rightStatus_, &RightStatusWidget::motionConnectionRequested,
+        this, &MainWindow::showMotionConnectionDialog);
+    connect(rightStatus_, &RightStatusWidget::laserConnectionRequested,
+        this, &MainWindow::showLaserConnectionDialog);
+    rightStatus_->setMachineState(
+        measurementTaskController_->machineState(),
+        measurementTaskController_->runMode());
 
     connect(navigation, &NavigationWidget::pageSelected, this, [pageStack](int index) {
         if (index < 0 || index >= pageStack->count()) {
@@ -161,11 +216,42 @@ MainWindow::MainWindow(QWidget* parent)
         pageStack->setCurrentIndex(index);
     });
     connect(topStatus_, &TopStatusWidget::emergencyStopRequested, this, [this] {
-        taskExecutor_->terminate();
-        setTaskState(QStringLiteral("已急停"), QStringLiteral("已提交软件急停意图；物理急停与安全联锁仍独立生效。"), QStringLiteral("terminated"));
+        measurementTaskController_->emergencyStop();
+        setTaskState(
+            QStringLiteral("已急停"),
+            QStringLiteral("软件故障已锁存；物理急停与安全联锁仍独立生效。"),
+            QStringLiteral("terminated"));
+    });
+    connect(topStatus_, &TopStatusWidget::resetRequested, this, [this] {
+        if (measurementTaskController_->resetMachineFault()) {
+            setTaskState(
+                QStringLiteral("故障已复位"),
+                QStringLiteral("已清除软件故障锁存并重新评估启动条件。"),
+                QStringLiteral("waiting"));
+        }
+    });
+    connect(topStatus_, &TopStatusWidget::doorLockCommandRequested,
+        this, [this](bool locked) {
+            const QString action = locked ? QStringLiteral("关锁") : QStringLiteral("开锁");
+            if (QMessageBox::question(
+                    this,
+                    QStringLiteral("门锁控制确认"),
+                    QStringLiteral("确认要%1吗？").arg(action),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::No) != QMessageBox::Yes) {
+                return;
+            }
+
+            if (measurementTaskController_->setDoorLocked(locked)) {
+                setTaskState(
+                    QStringLiteral("门锁命令已发送"),
+                    QStringLiteral("已发送%1命令。").arg(action),
+                    QStringLiteral("waiting"));
+            }
     });
     connect(mainPage, &MainPage::taskStateChangeRequested, this, &MainWindow::setTaskState);
-    connect(mainPage, &MainPage::automaticTaskPrepared, taskExecutor_, &TaskExecutor::start);
+    connect(mainPage, &MainPage::automaticTaskPrepared,
+        measurementTaskController_, &MeasurementTaskController::startAutomaticTask);
     connect(mainPage, &MainPage::taskTerminationRequested, taskExecutor_, &TaskExecutor::terminate);
     connect(mainPage, &MainPage::laserMeasurementStartRequested, this, [this, &deviceManager] {
         const otms::device::LaserStatus status = deviceManager.startLaserMeasurement();
@@ -199,33 +285,172 @@ MainWindow::MainWindow(QWidget* parent)
         setTaskState(QStringLiteral("无法执行"), reason, QStringLiteral("terminated"));
     });
     connect(mainPage, &MainPage::stageAxisAbsoluteMoveRequested, this, [this](MotorAxis axis, double target) {
-        const QString action = QStringLiteral("载物台单轴绝对移动：电机 %1=%2 mm")
-                                   .arg(motorAxisName(axis))
-                                   .arg(target, 0, 'f', 3);
-        showPrototypeNotice(action);
+        if (measurementTaskController_->moveAxisAbsolute(logicalAxis(axis), target)) {
+            setTaskState(
+                QStringLiteral("手动运动中"),
+                QStringLiteral("电机 %1 正在绝对定位至 %2 mm。")
+                    .arg(motorAxisName(axis))
+                    .arg(target, 0, 'f', 3),
+                QStringLiteral("ready"));
+        }
+    });
+    connect(mainPage, &MainPage::stageAxisRelativeMoveRequested, this, [this](MotorAxis axis, double distance) {
+        if (measurementTaskController_->moveAxisRelative(logicalAxis(axis), distance)) {
+            setTaskState(
+                QStringLiteral("手动运动中"),
+                QStringLiteral("电机 %1 正在相对移动 %2 mm。")
+                    .arg(motorAxisName(axis))
+                    .arg(distance, 0, 'f', 3),
+                QStringLiteral("ready"));
+        }
     });
     connect(mainPage, &MainPage::stageAbsoluteMoveRequested, this, [this](double motorX, double motorY, double motorZ) {
-        const QString action = QStringLiteral("载物台绝对移动：电机 X=%1 mm，Y=%2 mm，Z=%3 mm")
-                                   .arg(motorX, 0, 'f', 3)
-                                   .arg(motorY, 0, 'f', 3)
-                                   .arg(motorZ, 0, 'f', 3);
-        showPrototypeNotice(action);
+        if (measurementTaskController_->moveStageAbsolute(motorX, motorY, motorZ)) {
+            setTaskState(
+                QStringLiteral("手动运动中"),
+                QStringLiteral("载物台正在移动至 X=%1 mm，Y=%2 mm，Z=%3 mm。")
+                    .arg(motorX, 0, 'f', 3)
+                    .arg(motorY, 0, 'f', 3)
+                    .arg(motorZ, 0, 'f', 3),
+                QStringLiteral("ready"));
+        }
     });
     connect(mainPage, &MainPage::currentPositionExportRequested, this, [this] {
         showPrototypeNotice(QStringLiteral("导出当前电机绝对坐标与物料相对坐标"));
     });
     connect(mainPage, &MainPage::workpiecePointMoveRequested, this, [this](double workpieceX, double workpieceY, double motorX, double motorY) {
-        const QString action = QStringLiteral("物料测点引导：xw=%1 mm，yw=%2 mm → 电机 X=%3 mm，Y=%4 mm")
-                                   .arg(workpieceX, 0, 'f', 3)
-                                   .arg(workpieceY, 0, 'f', 3)
-                                   .arg(motorX, 0, 'f', 3)
-                                   .arg(motorY, 0, 'f', 3);
-        showPrototypeNotice(action);
+        if (measurementTaskController_->moveWorkpiecePoint(motorX, motorY)) {
+            setTaskState(
+                QStringLiteral("手动运动中"),
+                QStringLiteral("物料测点 (%1, %2) 正在移动至电机坐标 (%3, %4) mm。")
+                    .arg(workpieceX, 0, 'f', 3)
+                    .arg(workpieceY, 0, 'f', 3)
+                    .arg(motorX, 0, 'f', 3)
+                    .arg(motorY, 0, 'f', 3),
+                QStringLiteral("ready"));
+        }
     });
     connect(logPage, &LogPage::exportRequested, this, [this] {
         showPrototypeNotice(QStringLiteral("导出选中完成记录"));
     });
     navigation->selectPage(0);
+}
+
+void MainWindow::showMotionConnectionDialog()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("运动控制器连接"));
+    dialog.setMinimumWidth(420);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    const QStringList controllerIds = measurementTaskController_->motionControllerIds();
+    if (controllerIds.isEmpty()) {
+        QLabel* empty = new QLabel(QStringLiteral("当前没有已配置的运动控制器。"));
+        empty->setProperty("role", "muted");
+        layout->addWidget(empty);
+    }
+
+    for (const QString& controllerId : controllerIds) {
+        QGroupBox* controllerGroup = new QGroupBox(controllerId);
+        QHBoxLayout* controllerLayout = new QHBoxLayout(controllerGroup);
+        QLabel* connectionState = new QLabel;
+        connectionState->setMinimumWidth(72);
+        const auto refreshState = [this, controllerId, connectionState] {
+            connectionState->setText(
+                measurementTaskController_->isMotionControllerConnected(controllerId)
+                    ? QStringLiteral("已连接")
+                    : QStringLiteral("未连接"));
+        };
+        refreshState();
+
+        QPushButton* connectButton = new QPushButton(QStringLiteral("连接"));
+        QPushButton* disconnectButton = new QPushButton(QStringLiteral("断开"));
+        controllerLayout->addWidget(new QLabel(QStringLiteral("连接状态")));
+        controllerLayout->addWidget(connectionState);
+        controllerLayout->addStretch();
+        controllerLayout->addWidget(connectButton);
+        controllerLayout->addWidget(disconnectButton);
+
+        connect(connectButton, &QPushButton::clicked, &dialog,
+            [this, controllerId, refreshState] {
+                if (measurementTaskController_->connectMotionController(controllerId)) {
+                    setTaskState(
+                        QStringLiteral("设备连接"),
+                        QStringLiteral("运动控制器 %1 已执行连接命令。").arg(controllerId),
+                        QStringLiteral("ready"));
+                }
+                refreshState();
+            });
+        connect(disconnectButton, &QPushButton::clicked, &dialog,
+            [this, controllerId, refreshState] {
+                if (measurementTaskController_->disconnectMotionController(controllerId)) {
+                    setTaskState(
+                        QStringLiteral("设备断开"),
+                        QStringLiteral("运动控制器 %1 已执行断开命令。").arg(controllerId),
+                        QStringLiteral("waiting"));
+                }
+                refreshState();
+            });
+        layout->addWidget(controllerGroup);
+    }
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.exec();
+}
+
+void MainWindow::showLaserConnectionDialog()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("激光探头连接"));
+    dialog.setMinimumWidth(420);
+    QVBoxLayout* layout = new QVBoxLayout(&dialog);
+
+    QGroupBox* laserGroup = new QGroupBox(QStringLiteral("激光探头"));
+    QHBoxLayout* laserLayout = new QHBoxLayout(laserGroup);
+    QLabel* connectionState = new QLabel;
+    connectionState->setMinimumWidth(72);
+    const auto refreshState = [this, connectionState] {
+        connectionState->setText(
+            measurementTaskController_->isLaserConnected()
+                ? QStringLiteral("已连接")
+                : QStringLiteral("未连接"));
+    };
+    refreshState();
+
+    QPushButton* connectButton = new QPushButton(QStringLiteral("连接"));
+    QPushButton* disconnectButton = new QPushButton(QStringLiteral("断开"));
+    laserLayout->addWidget(new QLabel(QStringLiteral("连接状态")));
+    laserLayout->addWidget(connectionState);
+    laserLayout->addStretch();
+    laserLayout->addWidget(connectButton);
+    laserLayout->addWidget(disconnectButton);
+    layout->addWidget(laserGroup);
+
+    connect(connectButton, &QPushButton::clicked, &dialog, [this, refreshState] {
+        if (measurementTaskController_->connectLaser()) {
+            setTaskState(
+                QStringLiteral("设备连接"),
+                QStringLiteral("激光探头已执行连接命令。"),
+                QStringLiteral("ready"));
+        }
+        refreshState();
+    });
+    connect(disconnectButton, &QPushButton::clicked, &dialog, [this, refreshState] {
+        if (measurementTaskController_->disconnectLaser()) {
+            setTaskState(
+                QStringLiteral("设备断开"),
+                QStringLiteral("激光探头已执行断开命令。"),
+                QStringLiteral("waiting"));
+        }
+        refreshState();
+    });
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    dialog.exec();
 }
 
 void MainWindow::setTaskState(

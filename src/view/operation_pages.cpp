@@ -175,6 +175,7 @@ QTabWidget* MainPage::createOperationTabs()
     tabs->addTab(automaticOperation, QStringLiteral("自动化操作"));
 
     connect(manualControl, &ManualControlWidget::stageAxisAbsoluteMoveRequested, this, &MainPage::stageAxisAbsoluteMoveRequested);
+    connect(manualControl, &ManualControlWidget::stageAxisRelativeMoveRequested, this, &MainPage::stageAxisRelativeMoveRequested);
     connect(manualControl, &ManualControlWidget::stageAbsoluteMoveRequested, this, &MainPage::stageAbsoluteMoveRequested);
     connect(manualControl, &ManualControlWidget::workpiecePointMoveRequested, this, &MainPage::forwardWorkpiecePointMove);
     connect(manualControl, &ManualControlWidget::currentPositionExportRequested, this, &MainPage::currentPositionExportRequested);
@@ -244,41 +245,69 @@ ManualControlWidget::ManualControlWidget(QWidget* parent)
 
 QGroupBox* ManualControlWidget::createAbsoluteMoveGroup()
 {
-    QGroupBox* absoluteGroup = new QGroupBox(QStringLiteral("载物台绝对移动（电机坐标）"));
+    QGroupBox* absoluteGroup = new QGroupBox(QStringLiteral("载物台手动移动（电机坐标）"));
     QGridLayout* absoluteLayout = new QGridLayout(absoluteGroup);
     absoluteLayout->setHorizontalSpacing(12);
     absoluteLayout->setVerticalSpacing(12);
     absoluteLayout->addWidget(createColumnHeader(QStringLiteral("轴")), 0, 0);
     absoluteLayout->addWidget(createColumnHeader(QStringLiteral("绝对目标")), 0, 1);
-    absoluteLayout->addWidget(createColumnHeader(QStringLiteral("单轴操作")), 0, 2);
+    absoluteLayout->addWidget(createColumnHeader(QStringLiteral("绝对定位")), 0, 2);
+    absoluteLayout->addWidget(createColumnHeader(QStringLiteral("相对位移")), 0, 3);
+    absoluteLayout->addWidget(createColumnHeader(QStringLiteral("相对移动")), 0, 4);
 
     motorXInput_ = WidgetFactory::createCoordinateInput();
     motorYInput_ = WidgetFactory::createCoordinateInput();
     motorZInput_ = WidgetFactory::createCoordinateInput();
-    QPushButton* moveX = new QPushButton(QStringLiteral("移动 X 轴"));
-    QPushButton* moveY = new QPushButton(QStringLiteral("移动 Y 轴"));
-    QPushButton* moveZ = new QPushButton(QStringLiteral("移动 Z 轴"));
+    motorXRelativeInput_ = WidgetFactory::createCoordinateInput();
+    motorYRelativeInput_ = WidgetFactory::createCoordinateInput();
+    motorZRelativeInput_ = WidgetFactory::createCoordinateInput();
+    motorXRelativeInput_->setToolTip(QStringLiteral("正值向正方向移动，负值向负方向移动"));
+    motorYRelativeInput_->setToolTip(QStringLiteral("正值向正方向移动，负值向负方向移动"));
+    motorZRelativeInput_->setToolTip(QStringLiteral("正值向正方向移动，负值向负方向移动"));
+    QPushButton* moveX = new QPushButton(QStringLiteral("X 绝对定位"));
+    QPushButton* moveY = new QPushButton(QStringLiteral("Y 绝对定位"));
+    QPushButton* moveZ = new QPushButton(QStringLiteral("Z 绝对定位"));
+    QPushButton* moveXRelative = new QPushButton(QStringLiteral("X 相对移动"));
+    QPushButton* moveYRelative = new QPushButton(QStringLiteral("Y 相对移动"));
+    QPushButton* moveZRelative = new QPushButton(QStringLiteral("Z 相对移动"));
     absoluteLayout->addWidget(new QLabel(QStringLiteral("X")), 1, 0);
     absoluteLayout->addWidget(motorXInput_, 1, 1);
     absoluteLayout->addWidget(moveX, 1, 2);
+    absoluteLayout->addWidget(motorXRelativeInput_, 1, 3);
+    absoluteLayout->addWidget(moveXRelative, 1, 4);
     absoluteLayout->addWidget(new QLabel(QStringLiteral("Y")), 2, 0);
     absoluteLayout->addWidget(motorYInput_, 2, 1);
     absoluteLayout->addWidget(moveY, 2, 2);
+    absoluteLayout->addWidget(motorYRelativeInput_, 2, 3);
+    absoluteLayout->addWidget(moveYRelative, 2, 4);
     absoluteLayout->addWidget(new QLabel(QStringLiteral("Z")), 3, 0);
     absoluteLayout->addWidget(motorZInput_, 3, 1);
     absoluteLayout->addWidget(moveZ, 3, 2);
+    absoluteLayout->addWidget(motorZRelativeInput_, 3, 3);
+    absoluteLayout->addWidget(moveZRelative, 3, 4);
     absoluteLayout->setColumnStretch(1, 1);
+    absoluteLayout->setColumnStretch(3, 1);
 
-    QLabel* absoluteHint = new QLabel(QStringLiteral("输入电机 X/Y/Z 绝对目标，业务层校验后直接驱动载物台移动。"));
+    QLabel* absoluteHint = new QLabel(QStringLiteral("单轴操作请直接选择“绝对定位”或“相对移动”；相对位移允许输入正负值。"));
     absoluteHint->setWordWrap(true);
     absoluteHint->setProperty("role", "muted");
-    absoluteLayout->addWidget(absoluteHint, 4, 0, 1, 3);
-    QPushButton* absoluteMove = WidgetFactory::createPrimaryButton(QStringLiteral("XYZ 联动移动"));
-    absoluteLayout->addWidget(absoluteMove, 5, 0, 1, 3);
+    absoluteLayout->addWidget(absoluteHint, 4, 0, 1, 5);
+    QLabel* jointMoveHint = new QLabel(QStringLiteral("联合操作仅支持绝对坐标，将使用左侧 X/Y/Z 绝对目标。"));
+    jointMoveHint->setWordWrap(true);
+    jointMoveHint->setProperty("role", "warningText");
+    absoluteLayout->addWidget(jointMoveHint, 5, 0, 1, 5);
+    QPushButton* absoluteMove = WidgetFactory::createPrimaryButton(QStringLiteral("XYZ 联动绝对定位"));
+    absoluteLayout->addWidget(absoluteMove, 6, 0, 1, 5);
 
     connect(moveX, &QPushButton::clicked, this, &ManualControlWidget::requestXAxisMove);
     connect(moveY, &QPushButton::clicked, this, &ManualControlWidget::requestYAxisMove);
     connect(moveZ, &QPushButton::clicked, this, &ManualControlWidget::requestZAxisMove);
+    connect(moveXRelative, &QPushButton::clicked,
+        this, &ManualControlWidget::requestXAxisRelativeMove);
+    connect(moveYRelative, &QPushButton::clicked,
+        this, &ManualControlWidget::requestYAxisRelativeMove);
+    connect(moveZRelative, &QPushButton::clicked,
+        this, &ManualControlWidget::requestZAxisRelativeMove);
     connect(absoluteMove, &QPushButton::clicked, this, &ManualControlWidget::requestStageMove);
     return absoluteGroup;
 }
@@ -329,6 +358,21 @@ void ManualControlWidget::requestYAxisMove()
 void ManualControlWidget::requestZAxisMove()
 {
     emit stageAxisAbsoluteMoveRequested(MotorAxis::Z, motorZInput_->value());
+}
+
+void ManualControlWidget::requestXAxisRelativeMove()
+{
+    emit stageAxisRelativeMoveRequested(MotorAxis::X, motorXRelativeInput_->value());
+}
+
+void ManualControlWidget::requestYAxisRelativeMove()
+{
+    emit stageAxisRelativeMoveRequested(MotorAxis::Y, motorYRelativeInput_->value());
+}
+
+void ManualControlWidget::requestZAxisRelativeMove()
+{
+    emit stageAxisRelativeMoveRequested(MotorAxis::Z, motorZRelativeInput_->value());
 }
 
 void ManualControlWidget::requestStageMove()

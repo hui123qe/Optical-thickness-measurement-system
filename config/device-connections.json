@@ -1,4 +1,73 @@
 {
+  "motion": {
+    "controllers": [
+      {
+        "id": "stage",
+        "type": "Agc301",
+        "ipAddress": "192.168.0.10"
+      }
+    ],
+    "axes": [
+      {
+        "id": "x",
+        "controller": "stage",
+        "controllerAxis": 0,
+        "countsPerUnit": 1000.0
+      },
+      {
+        "id": "y",
+        "controller": "stage",
+        "controllerAxis": 1,
+        "countsPerUnit": 1000.0
+      },
+      {
+        "id": "z",
+        "controller": "stage",
+        "controllerAxis": 2,
+        "countsPerUnit": 1000.0
+      }
+    ],
+    "digitalInputs": [
+      {
+        "id": "doorLocked",
+        "controller": "stage",
+        "controllerPoint": 4,
+        "activeHigh": true
+      },
+      {
+        "id": "lightCurtainClear",
+        "controller": "stage",
+        "controllerPoint": 5,
+        "activeHigh": true
+      }
+    ],
+    "digitalOutputs": [
+      {
+        "id": "redLamp",
+        "controller": "stage",
+        "controllerPoint": 2,
+        "activeHigh": true
+      },
+      {
+        "id": "yellowLamp",
+        "controller": "stage",
+        "controllerPoint": 3,
+        "activeHigh": true
+      },
+      {
+        "id": "doorLock",
+        "controller": "stage",
+        "controllerPoint": 4,
+        "activeHigh": true
+      },
+      {
+        "id": "greenLamp",
+        "controller": "stage",
+        "controllerPoint": 5,
+        "activeHigh": true
+      }
+    ]
+  },
   "cl3000": {
     "deviceId": 0,
     "ipAddress": "192.168.0.1",

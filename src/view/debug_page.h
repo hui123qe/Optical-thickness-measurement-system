@@ -19,6 +19,22 @@ class LaserDebugPage final : public QWidget
 public:
     explicit LaserDebugPage(QWidget* parent = nullptr);
 
+private slots:
+    void applyProbeConfigFromControl();
+    void saveProbeConfig();
+    void connectLaser();
+    void disconnectLaser();
+    void selectLaserProgram();
+    void enableLaser();
+    void disableLaser();
+    void startLaserMeasurement();
+    void stopLaserMeasurement();
+    void setLaserZero();
+    void clearLaserZero();
+    void resetLaserOutput();
+    void readLatestLaserMeasurement();
+    void measureLaserOnce();
+
 private:
     bool applyProbeConfig();
     otms::device::LaserOutput selectedOutput() const;

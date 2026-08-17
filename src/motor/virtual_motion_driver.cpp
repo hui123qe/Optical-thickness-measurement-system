@@ -17,14 +17,14 @@ bool additionFitsInt(int first, int second)
 
 } // namespace
 
-int VirtualMotionDriver::connect()
+int VirtualMotionController::connect()
 {
     std::scoped_lock lock(stateMutex_);
     connected_ = true;
     return 1;
 }
 
-int VirtualMotionDriver::disconnect()
+int VirtualMotionController::disconnect()
 {
     std::scoped_lock lock(stateMutex_);
     for (auto& [axis, state] : axisStates_) {
@@ -39,14 +39,14 @@ int VirtualMotionDriver::disconnect()
     return 1;
 }
 
-int VirtualMotionDriver::isConnected(int& connected) const
+int VirtualMotionController::isConnected(int& connected) const
 {
     std::scoped_lock lock(stateMutex_);
     connected = connected_ ? 1 : 0;
     return 1;
 }
 
-int VirtualMotionDriver::enable(int axis)
+int VirtualMotionController::enableAxis(int axis)
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -56,7 +56,7 @@ int VirtualMotionDriver::enable(int axis)
     return 1;
 }
 
-int VirtualMotionDriver::disable(int axis)
+int VirtualMotionController::disableAxis(int axis)
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -70,7 +70,7 @@ int VirtualMotionDriver::disable(int axis)
     return 1;
 }
 
-int VirtualMotionDriver::isEnabled(int axis, int& enabled) const
+int VirtualMotionController::isAxisEnabled(int axis, int& enabled) const
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -82,7 +82,7 @@ int VirtualMotionDriver::isEnabled(int axis, int& enabled) const
     return 1;
 }
 
-int VirtualMotionDriver::home(int axis, bool asynchronous, int timeoutSeconds)
+int VirtualMotionController::homeAxis(int axis, bool asynchronous, int timeoutSeconds)
 {
     static_cast<void>(asynchronous);
     if (timeoutSeconds <= 0) {
@@ -92,7 +92,7 @@ int VirtualMotionDriver::home(int axis, bool asynchronous, int timeoutSeconds)
     return moveImmediate(axis, 0) ? 1 : 0;
 }
 
-int VirtualMotionDriver::moveAbsolute(
+int VirtualMotionController::moveAbsolute(
     int axis,
     int positionCounts,
     bool asynchronous,
@@ -106,7 +106,7 @@ int VirtualMotionDriver::moveAbsolute(
     return moveImmediate(axis, positionCounts) ? 1 : 0;
 }
 
-int VirtualMotionDriver::moveRelative(
+int VirtualMotionController::moveRelative(
     int axis,
     int distanceCounts,
     bool asynchronous,
@@ -129,7 +129,7 @@ int VirtualMotionDriver::moveRelative(
     return moveImmediate(axis, state.positionCounts + distanceCounts) ? 1 : 0;
 }
 
-int VirtualMotionDriver::moveAbsoluteRepetitive(
+int VirtualMotionController::moveAbsoluteRepetitive(
     int axis,
     int positionCounts,
     int dwellTimeMs)
@@ -141,7 +141,7 @@ int VirtualMotionDriver::moveAbsoluteRepetitive(
     return moveImmediate(axis, positionCounts) ? 1 : 0;
 }
 
-int VirtualMotionDriver::getReferencePosition(int axis, int& positionCounts) const
+int VirtualMotionController::getReferencePosition(int axis, int& positionCounts) const
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -155,7 +155,7 @@ int VirtualMotionDriver::getReferencePosition(int axis, int& positionCounts) con
     return 1;
 }
 
-int VirtualMotionDriver::getPosition(int axis, int& positionCounts) const
+int VirtualMotionController::getPosition(int axis, int& positionCounts) const
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -169,7 +169,7 @@ int VirtualMotionDriver::getPosition(int axis, int& positionCounts) const
     return 1;
 }
 
-int VirtualMotionDriver::getVelocity(int axis, int& velocityCountsPerSecond) const
+int VirtualMotionController::getVelocity(int axis, int& velocityCountsPerSecond) const
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -183,7 +183,7 @@ int VirtualMotionDriver::getVelocity(int axis, int& velocityCountsPerSecond) con
     return 1;
 }
 
-int VirtualMotionDriver::getMotionStatus(int axis, int& status) const
+int VirtualMotionController::getMotionStatus(int axis, int& status) const
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -198,7 +198,7 @@ int VirtualMotionDriver::getMotionStatus(int axis, int& status) const
     return 1;
 }
 
-int VirtualMotionDriver::setSpeed(int axis, int speedCountsPerSecond)
+int VirtualMotionController::setSpeed(int axis, int speedCountsPerSecond)
 {
     std::scoped_lock lock(stateMutex_);
     if (!axisReady(axis) || speedCountsPerSecond < 0) {
@@ -208,7 +208,7 @@ int VirtualMotionDriver::setSpeed(int axis, int speedCountsPerSecond)
     return 1;
 }
 
-int VirtualMotionDriver::jog(int axis, int velocityCountsPerSecond)
+int VirtualMotionController::jog(int axis, int velocityCountsPerSecond)
 {
     std::scoped_lock lock(stateMutex_);
     if (!axisReady(axis) || velocityCountsPerSecond == 0) {
@@ -221,16 +221,16 @@ int VirtualMotionDriver::jog(int axis, int velocityCountsPerSecond)
     return 1;
 }
 
-int VirtualMotionDriver::stop(int axis, bool asynchronous, int timeoutSeconds)
+int VirtualMotionController::stopAxis(int axis, bool asynchronous, int timeoutSeconds)
 {
     static_cast<void>(asynchronous);
     if (timeoutSeconds <= 0) {
         return 0;
     }
-    return abort(axis);
+    return abortAxis(axis);
 }
 
-int VirtualMotionDriver::abort(int axis)
+int VirtualMotionController::abortAxis(int axis)
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_ || !validAxis(axis)) {
@@ -243,7 +243,39 @@ int VirtualMotionDriver::abort(int axis)
     return 1;
 }
 
-bool VirtualMotionDriver::cncBegin()
+int VirtualMotionController::readDigitalInput(int point, bool& value) const
+{
+    std::scoped_lock lock(stateMutex_);
+    if (!connected_ || point < 0) {
+        return 0;
+    }
+    const auto input = digitalInputs_.find(point);
+    value = input != digitalInputs_.end() && input->second;
+    return 1;
+}
+
+int VirtualMotionController::readDigitalOutput(int point, bool& value) const
+{
+    std::scoped_lock lock(stateMutex_);
+    if (!connected_ || point < 0) {
+        return 0;
+    }
+    const auto output = digitalOutputs_.find(point);
+    value = output != digitalOutputs_.end() && output->second;
+    return 1;
+}
+
+int VirtualMotionController::writeDigitalOutput(int point, bool value)
+{
+    std::scoped_lock lock(stateMutex_);
+    if (!connected_ || point < 0) {
+        return 0;
+    }
+    digitalOutputs_.insert_or_assign(point, value);
+    return 1;
+}
+
+bool VirtualMotionController::cncBegin()
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_) {
@@ -253,7 +285,7 @@ bool VirtualMotionDriver::cncBegin()
     return true;
 }
 
-bool VirtualMotionDriver::cncClearBuffer()
+bool VirtualMotionController::cncClearBuffer()
 {
     std::scoped_lock lock(stateMutex_);
     if (!connected_) {
@@ -263,7 +295,7 @@ bool VirtualMotionDriver::cncClearBuffer()
     return true;
 }
 
-bool VirtualMotionDriver::cncLinearAbsoluteXT(
+bool VirtualMotionController::cncLinearAbsoluteXT(
     int xPositionCounts,
     int tPositionCounts,
     int cruiseVelocityCountsPerSecond,
@@ -277,7 +309,7 @@ bool VirtualMotionDriver::cncLinearAbsoluteXT(
         && moveImmediate(VirtualSecondAxis, tPositionCounts);
 }
 
-bool VirtualMotionDriver::cncLinearAbsoluteXY(
+bool VirtualMotionController::cncLinearAbsoluteXY(
     int xPositionCounts,
     int yPositionCounts,
     int cruiseVelocityCountsPerSecond,
@@ -291,12 +323,12 @@ bool VirtualMotionDriver::cncLinearAbsoluteXY(
         && moveImmediate(VirtualSecondAxis, yPositionCounts);
 }
 
-bool VirtualMotionDriver::validAxis(int axis)
+bool VirtualMotionController::validAxis(int axis)
 {
     return axis >= 0;
 }
 
-bool VirtualMotionDriver::axisReady(int axis) const
+bool VirtualMotionController::axisReady(int axis) const
 {
     if (!connected_ || !validAxis(axis)) {
         return false;
@@ -305,24 +337,24 @@ bool VirtualMotionDriver::axisReady(int axis) const
     return state != nullptr && state->enabled;
 }
 
-VirtualMotionDriver::AxisState& VirtualMotionDriver::stateFor(int axis)
+VirtualMotionController::AxisState& VirtualMotionController::stateFor(int axis)
 {
     return axisStates_[axis];
 }
 
-const VirtualMotionDriver::AxisState* VirtualMotionDriver::findState(int axis) const
+const VirtualMotionController::AxisState* VirtualMotionController::findState(int axis) const
 {
     const auto state = axisStates_.find(axis);
     return state != axisStates_.end() ? &state->second : nullptr;
 }
 
-VirtualMotionDriver::AxisState* VirtualMotionDriver::findMutableState(int axis) const
+VirtualMotionController::AxisState* VirtualMotionController::findMutableState(int axis) const
 {
     const auto state = axisStates_.find(axis);
     return state != axisStates_.end() ? &state->second : nullptr;
 }
 
-void VirtualMotionDriver::updateArrival(AxisState& state)
+void VirtualMotionController::updateArrival(AxisState& state)
 {
     if (!state.movePending || std::chrono::steady_clock::now() < state.arrivalDeadline) {
         return;
@@ -335,7 +367,7 @@ void VirtualMotionDriver::updateArrival(AxisState& state)
     state.inPosition = true;
 }
 
-bool VirtualMotionDriver::moveImmediate(int axis, int positionCounts)
+bool VirtualMotionController::moveImmediate(int axis, int positionCounts)
 {
     if (!axisReady(axis)) {
         return false;

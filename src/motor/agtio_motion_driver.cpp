@@ -11,7 +11,7 @@ Q_LOGGING_CATEGORY(agtioMotionLog, "otms.device.agtio")
 
 namespace otms::device {
 
-AgtioMotionDriver::AgtioMotionDriver(QString ipAddress, AgtioControllerType controllerType)
+AgtioMotionController::AgtioMotionController(QString ipAddress, AgtioControllerType controllerType)
     : ipAddress_(std::move(ipAddress))
     , ipAddressBytes_(ipAddress_.toLatin1())
     , controllerType_(controllerType)
@@ -23,7 +23,7 @@ AgtioMotionDriver::AgtioMotionDriver(QString ipAddress, AgtioControllerType cont
     }
 }
 
-AgtioMotionDriver::~AgtioMotionDriver()
+AgtioMotionController::~AgtioMotionController()
 {
     if (hasController() && GetIsConnected(controllerId_) == 1) {
         qCInfo(agtioMotionLog) << "Disconnecting AGTIO controller during driver shutdown";
@@ -31,7 +31,7 @@ AgtioMotionDriver::~AgtioMotionDriver()
     }
 }
 
-int AgtioMotionDriver::connect()
+int AgtioMotionController::connect()
 {
     if (!hasController()) {
         return 0;
@@ -44,7 +44,7 @@ int AgtioMotionDriver::connect()
     return Connect(controllerId_, ipAddressBytes_.data());
 }
 
-int AgtioMotionDriver::disconnect()
+int AgtioMotionController::disconnect()
 {
     if (!hasController()) {
         return 0;
@@ -57,7 +57,7 @@ int AgtioMotionDriver::disconnect()
     return Disconnect(controllerId_);
 }
 
-int AgtioMotionDriver::isConnected(int& connected) const
+int AgtioMotionController::isConnected(int& connected) const
 {
     if (!hasController()) {
         connected = 0;
@@ -68,7 +68,7 @@ int AgtioMotionDriver::isConnected(int& connected) const
     return 1;
 }
 
-int AgtioMotionDriver::enable(int axis)
+int AgtioMotionController::enableAxis(int axis)
 {
     if (!hasController()) {
         return 0;
@@ -77,7 +77,7 @@ int AgtioMotionDriver::enable(int axis)
     return MotorOn(controllerId_, axis);
 }
 
-int AgtioMotionDriver::disable(int axis)
+int AgtioMotionController::disableAxis(int axis)
 {
     if (!hasController()) {
         return 0;
@@ -86,12 +86,12 @@ int AgtioMotionDriver::disable(int axis)
     return MotorOff(controllerId_, axis);
 }
 
-int AgtioMotionDriver::isEnabled(int axis, int& enabled) const
+int AgtioMotionController::isAxisEnabled(int axis, int& enabled) const
 {
     return hasController() ? GetMotorOnStatus(controllerId_, axis, enabled) : 0;
 }
 
-int AgtioMotionDriver::home(int axis, bool asynchronous, int timeoutSeconds)
+int AgtioMotionController::homeAxis(int axis, bool asynchronous, int timeoutSeconds)
 {
     if (!hasController()) {
         return 0;
@@ -101,7 +101,7 @@ int AgtioMotionDriver::home(int axis, bool asynchronous, int timeoutSeconds)
     return Homingon(controllerId_, axis, asynchronous, timeoutSeconds);
 }
 
-int AgtioMotionDriver::moveAbsolute(
+int AgtioMotionController::moveAbsolute(
     int axis,
     int positionCounts,
     bool asynchronous,
@@ -115,7 +115,7 @@ int AgtioMotionDriver::moveAbsolute(
     return MoveAbs(controllerId_, axis, positionCounts, asynchronous, timeoutSeconds);
 }
 
-int AgtioMotionDriver::moveRelative(
+int AgtioMotionController::moveRelative(
     int axis,
     int distanceCounts,
     bool asynchronous,
@@ -129,7 +129,7 @@ int AgtioMotionDriver::moveRelative(
     return MoveRel(controllerId_, axis, distanceCounts, asynchronous, timeoutSeconds);
 }
 
-int AgtioMotionDriver::moveAbsoluteRepetitive(int axis, int positionCounts, int dwellTimeMs)
+int AgtioMotionController::moveAbsoluteRepetitive(int axis, int positionCounts, int dwellTimeMs)
 {
     if (!hasController()) {
         return 0;
@@ -139,27 +139,27 @@ int AgtioMotionDriver::moveAbsoluteRepetitive(int axis, int positionCounts, int 
     return MoveAbsRepetitive(controllerId_, axis, positionCounts, dwellTimeMs);
 }
 
-int AgtioMotionDriver::getReferencePosition(int axis, int& positionCounts) const
+int AgtioMotionController::getReferencePosition(int axis, int& positionCounts) const
 {
     return hasController() ? GetPosRef(controllerId_, axis, positionCounts) : 0;
 }
 
-int AgtioMotionDriver::getPosition(int axis, int& positionCounts) const
+int AgtioMotionController::getPosition(int axis, int& positionCounts) const
 {
     return hasController() ? GetPos(controllerId_, axis, positionCounts) : 0;
 }
 
-int AgtioMotionDriver::getVelocity(int axis, int& velocityCountsPerSecond) const
+int AgtioMotionController::getVelocity(int axis, int& velocityCountsPerSecond) const
 {
     return hasController() ? ReadVel(controllerId_, axis, velocityCountsPerSecond) : 0;
 }
 
-int AgtioMotionDriver::getMotionStatus(int axis, int& status) const
+int AgtioMotionController::getMotionStatus(int axis, int& status) const
 {
     return hasController() ? GetMotionStat(controllerId_, axis, status) : 0;
 }
 
-int AgtioMotionDriver::setSpeed(int axis, int speedCountsPerSecond)
+int AgtioMotionController::setSpeed(int axis, int speedCountsPerSecond)
 {
     if (!hasController()) {
         return 0;
@@ -169,7 +169,7 @@ int AgtioMotionDriver::setSpeed(int axis, int speedCountsPerSecond)
     return 1;
 }
 
-int AgtioMotionDriver::jog(int axis, int velocityCountsPerSecond)
+int AgtioMotionController::jog(int axis, int velocityCountsPerSecond)
 {
     if (!hasController()) {
         return 0;
@@ -178,7 +178,7 @@ int AgtioMotionDriver::jog(int axis, int velocityCountsPerSecond)
     return Jog(controllerId_, axis, velocityCountsPerSecond);
 }
 
-int AgtioMotionDriver::stop(int axis, bool asynchronous, int timeoutSeconds)
+int AgtioMotionController::stopAxis(int axis, bool asynchronous, int timeoutSeconds)
 {
     if (!hasController()) {
         return 0;
@@ -188,7 +188,7 @@ int AgtioMotionDriver::stop(int axis, bool asynchronous, int timeoutSeconds)
     return Stop(controllerId_, axis, asynchronous, timeoutSeconds);
 }
 
-int AgtioMotionDriver::abort(int axis)
+int AgtioMotionController::abortAxis(int axis)
 {
     if (!hasController()) {
         return 0;
@@ -197,7 +197,37 @@ int AgtioMotionDriver::abort(int axis)
     return Abort(controllerId_, axis);
 }
 
-bool AgtioMotionDriver::cncBegin()
+int AgtioMotionController::readDigitalInput(int point, bool& value) const
+{
+    int rawValue = 0;
+    const int result = hasController() ? GetDInPort(controllerId_, point, rawValue) : 0;
+    if (result == 1) {
+        value = rawValue != 0;
+    }
+    return result;
+}
+
+int AgtioMotionController::readDigitalOutput(int point, bool& value) const
+{
+    int rawValue = 0;
+    const int result = hasController() ? GetDOutPort(controllerId_, point, rawValue) : 0;
+    if (result == 1) {
+        value = rawValue != 0;
+    }
+    return result;
+}
+
+int AgtioMotionController::writeDigitalOutput(int point, bool value)
+{
+    if (!hasController() || GetIsConnected(controllerId_) != 1) {
+        return 0;
+    }
+    qCInfo(agtioMotionLog) << "Writing AGTIO digital output" << point << value;
+    SetDOutPort(controllerId_, point, value);
+    return 1;
+}
+
+bool AgtioMotionController::cncBegin()
 {
     if (!hasController()) {
         return false;
@@ -206,7 +236,7 @@ bool AgtioMotionDriver::cncBegin()
     return CNCBegin(controllerId_);
 }
 
-bool AgtioMotionDriver::cncClearBuffer()
+bool AgtioMotionController::cncClearBuffer()
 {
     if (!hasController()) {
         return false;
@@ -215,7 +245,7 @@ bool AgtioMotionDriver::cncClearBuffer()
     return CNCClearBuffer(controllerId_);
 }
 
-bool AgtioMotionDriver::cncLinearAbsoluteXT(
+bool AgtioMotionController::cncLinearAbsoluteXT(
     int xPositionCounts,
     int tPositionCounts,
     int cruiseVelocityCountsPerSecond,
@@ -234,7 +264,7 @@ bool AgtioMotionDriver::cncLinearAbsoluteXT(
         endVelocityCountsPerSecond);
 }
 
-bool AgtioMotionDriver::cncLinearAbsoluteXY(
+bool AgtioMotionController::cncLinearAbsoluteXY(
     int xPositionCounts,
     int yPositionCounts,
     int cruiseVelocityCountsPerSecond,
@@ -253,17 +283,17 @@ bool AgtioMotionDriver::cncLinearAbsoluteXY(
         endVelocityCountsPerSecond);
 }
 
-QString AgtioMotionDriver::ipAddress() const
+QString AgtioMotionController::ipAddress() const
 {
     return ipAddress_;
 }
 
-AgtioControllerType AgtioMotionDriver::controllerType() const
+AgtioControllerType AgtioMotionController::controllerType() const
 {
     return controllerType_;
 }
 
-bool AgtioMotionDriver::hasController() const
+bool AgtioMotionController::hasController() const
 {
     return controllerId_ != nullptr;
 }

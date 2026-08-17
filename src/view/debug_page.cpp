@@ -62,7 +62,6 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     : QWidget(parent)
 {
     using otms::device::DeviceManager;
-    using otms::device::LaserMeasurement;
     using otms::device::LaserStatus;
 
     QVBoxLayout* pageLayout = new QVBoxLayout(this);
@@ -207,100 +206,179 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
             static_cast<int>(config.pollingInterval.count()));
     }
 
-    connect(outputInput_, &QComboBox::currentIndexChanged, this, [this](int) {
-        applyProbeConfig();
-    });
-    connect(scaleInput_, &QDoubleSpinBox::valueChanged, this, [this](double) {
-        applyProbeConfig();
-    });
-    connect(measurementTimeoutInput_, &QSpinBox::valueChanged, this, [this](int) {
-        applyProbeConfig();
-    });
-    connect(pollingIntervalInput_, &QSpinBox::valueChanged, this, [this](int) {
-        applyProbeConfig();
-    });
-    connect(saveConfigButton, &QPushButton::clicked, this, [this, &manager] {
-        if (!applyProbeConfig()) {
-            return;
-        }
-        appendStatus(
-            QStringLiteral("保存设备配置"),
-            manager.saveLaserConfiguration(
-                static_cast<std::uint8_t>(programInput_->value()),
-                manager.laserProbeConfig()));
-    });
+    connect(outputInput_, &QComboBox::currentIndexChanged,
+        this, &LaserDebugPage::applyProbeConfigFromControl);
+    connect(scaleInput_, &QDoubleSpinBox::valueChanged,
+        this, &LaserDebugPage::applyProbeConfigFromControl);
+    connect(measurementTimeoutInput_, &QSpinBox::valueChanged,
+        this, &LaserDebugPage::applyProbeConfigFromControl);
+    connect(pollingIntervalInput_, &QSpinBox::valueChanged,
+        this, &LaserDebugPage::applyProbeConfigFromControl);
+    connect(saveConfigButton, &QPushButton::clicked,
+        this, &LaserDebugPage::saveProbeConfig);
 
-    connect(connectButton_, &QPushButton::clicked, this, [this, &manager] {
-        if (!applyProbeConfig()) {
-            return;
-        }
-        appendStatus(QStringLiteral("连接"), manager.connectLaserEthernet());
-    });
-    connect(disconnectButton_, &QPushButton::clicked, this, [this, &manager] {
-        appendStatus(QStringLiteral("断开"), manager.disconnectLaser());
-    });
-    connect(selectProgramButton, &QPushButton::clicked, this, [this, &manager] {
-        appendStatus(
-            QStringLiteral("切换程序"),
-            manager.selectLaserProgram(static_cast<std::uint8_t>(programInput_->value())));
-    });
-    connect(enableLaserButton, &QPushButton::clicked, this, [this, &manager] {
-        if (confirmHardwareAction(
-                QStringLiteral("确认开启激光"),
-                QStringLiteral("即将开启 CL-3000 激光发射，请确认探头区域满足激光安全要求。"))) {
-            appendStatus(QStringLiteral("开启激光"), manager.enableLaser());
-        }
-    });
-    connect(disableLaserButton, &QPushButton::clicked, this, [this, &manager] {
-        appendStatus(QStringLiteral("关闭激光"), manager.disableLaser());
-    });
-    connect(startMeasurementButton, &QPushButton::clicked, this, [this, &manager] {
-        appendStatus(QStringLiteral("启动测量"), manager.startLaserMeasurement());
-    });
-    connect(stopMeasurementButton, &QPushButton::clicked, this, [this, &manager] {
-        appendStatus(QStringLiteral("停止测量"), manager.stopLaserMeasurement());
-    });
-    connect(setZeroButton, &QPushButton::clicked, this, [this, &manager] {
-        if (confirmHardwareAction(
-                QStringLiteral("确认设置零点"),
-                QStringLiteral("当前有效测量值将作为所选输出的零点。请确认基准面已正确就位。"))) {
-            appendStatus(QStringLiteral("设置零点"), manager.setLaserZero(selectedOutput()));
-        }
-    });
-    connect(clearZeroButton, &QPushButton::clicked, this, [this, &manager] {
-        if (confirmHardwareAction(
-                QStringLiteral("确认清除零点"),
-                QStringLiteral("即将取消所选输出的自动调零值。"))) {
-            appendStatus(QStringLiteral("清除零点"), manager.clearLaserZero(selectedOutput()));
-        }
-    });
-    connect(resetOutputButton, &QPushButton::clicked, this, [this, &manager] {
-        appendStatus(QStringLiteral("复位输出"), manager.resetLaserOutput(selectedOutput()));
-    });
-    connect(readLatestButton, &QPushButton::clicked, this, [this, &manager] {
-        if (!applyProbeConfig()) {
-            return;
-        }
-        LaserMeasurement measurement;
-        const LaserStatus status = manager.readLatestLaserMeasurement(measurement);
-        appendStatus(QStringLiteral("读取当前值"), status);
-        if (status.ok()) {
-            showMeasurement(measurement);
-        }
-    });
-    connect(measureOnceButton, &QPushButton::clicked, this, [this, &manager] {
-        if (!applyProbeConfig()) {
-            return;
-        }
-        LaserMeasurement measurement;
-        const LaserStatus status = manager.measureLaserOnce(measurement);
-        appendStatus(QStringLiteral("软件触发测量"), status);
-        if (status.ok()) {
-            showMeasurement(measurement);
-        }
-    });
+    connect(connectButton_, &QPushButton::clicked,
+        this, &LaserDebugPage::connectLaser);
+    connect(disconnectButton_, &QPushButton::clicked,
+        this, &LaserDebugPage::disconnectLaser);
+    connect(selectProgramButton, &QPushButton::clicked,
+        this, &LaserDebugPage::selectLaserProgram);
+    connect(enableLaserButton, &QPushButton::clicked,
+        this, &LaserDebugPage::enableLaser);
+    connect(disableLaserButton, &QPushButton::clicked,
+        this, &LaserDebugPage::disableLaser);
+    connect(startMeasurementButton, &QPushButton::clicked,
+        this, &LaserDebugPage::startLaserMeasurement);
+    connect(stopMeasurementButton, &QPushButton::clicked,
+        this, &LaserDebugPage::stopLaserMeasurement);
+    connect(setZeroButton, &QPushButton::clicked,
+        this, &LaserDebugPage::setLaserZero);
+    connect(clearZeroButton, &QPushButton::clicked,
+        this, &LaserDebugPage::clearLaserZero);
+    connect(resetOutputButton, &QPushButton::clicked,
+        this, &LaserDebugPage::resetLaserOutput);
+    connect(readLatestButton, &QPushButton::clicked,
+        this, &LaserDebugPage::readLatestLaserMeasurement);
+    connect(measureOnceButton, &QPushButton::clicked,
+        this, &LaserDebugPage::measureLaserOnce);
 
     updateConnectionState(manager.isLaserConnected(), QStringLiteral("尚未连接设备"));
+}
+
+void LaserDebugPage::applyProbeConfigFromControl()
+{
+    applyProbeConfig();
+}
+
+void LaserDebugPage::saveProbeConfig()
+{
+    if (!applyProbeConfig()) {
+        return;
+    }
+
+    otms::device::DeviceManager& manager = otms::device::DeviceManager::instance();
+    appendStatus(
+        QStringLiteral("保存设备配置"),
+        manager.saveLaserConfiguration(
+            static_cast<std::uint8_t>(programInput_->value()),
+            manager.laserProbeConfig()));
+}
+
+void LaserDebugPage::connectLaser()
+{
+    if (!applyProbeConfig()) {
+        return;
+    }
+
+    appendStatus(
+        QStringLiteral("连接"),
+        otms::device::DeviceManager::instance().connectLaserEthernet());
+}
+
+void LaserDebugPage::disconnectLaser()
+{
+    appendStatus(
+        QStringLiteral("断开"),
+        otms::device::DeviceManager::instance().disconnectLaser());
+}
+
+void LaserDebugPage::selectLaserProgram()
+{
+    appendStatus(
+        QStringLiteral("切换程序"),
+        otms::device::DeviceManager::instance().selectLaserProgram(
+            static_cast<std::uint8_t>(programInput_->value())));
+}
+
+void LaserDebugPage::enableLaser()
+{
+    if (confirmHardwareAction(
+            QStringLiteral("确认开启激光"),
+            QStringLiteral("即将开启 CL-3000 激光发射，请确认探头区域满足激光安全要求。"))) {
+        appendStatus(
+            QStringLiteral("开启激光"),
+            otms::device::DeviceManager::instance().enableLaser());
+    }
+}
+
+void LaserDebugPage::disableLaser()
+{
+    appendStatus(
+        QStringLiteral("关闭激光"),
+        otms::device::DeviceManager::instance().disableLaser());
+}
+
+void LaserDebugPage::startLaserMeasurement()
+{
+    appendStatus(
+        QStringLiteral("启动测量"),
+        otms::device::DeviceManager::instance().startLaserMeasurement());
+}
+
+void LaserDebugPage::stopLaserMeasurement()
+{
+    appendStatus(
+        QStringLiteral("停止测量"),
+        otms::device::DeviceManager::instance().stopLaserMeasurement());
+}
+
+void LaserDebugPage::setLaserZero()
+{
+    if (confirmHardwareAction(
+            QStringLiteral("确认设置零点"),
+            QStringLiteral("当前有效测量值将作为所选输出的零点。请确认基准面已正确就位。"))) {
+        appendStatus(
+            QStringLiteral("设置零点"),
+            otms::device::DeviceManager::instance().setLaserZero(selectedOutput()));
+    }
+}
+
+void LaserDebugPage::clearLaserZero()
+{
+    if (confirmHardwareAction(
+            QStringLiteral("确认清除零点"),
+            QStringLiteral("即将取消所选输出的自动调零值。"))) {
+        appendStatus(
+            QStringLiteral("清除零点"),
+            otms::device::DeviceManager::instance().clearLaserZero(selectedOutput()));
+    }
+}
+
+void LaserDebugPage::resetLaserOutput()
+{
+    appendStatus(
+        QStringLiteral("复位输出"),
+        otms::device::DeviceManager::instance().resetLaserOutput(selectedOutput()));
+}
+
+void LaserDebugPage::readLatestLaserMeasurement()
+{
+    if (!applyProbeConfig()) {
+        return;
+    }
+
+    otms::device::LaserMeasurement measurement;
+    const otms::device::LaserStatus status =
+        otms::device::DeviceManager::instance().readLatestLaserMeasurement(measurement);
+    appendStatus(QStringLiteral("读取当前值"), status);
+    if (status.ok()) {
+        showMeasurement(measurement);
+    }
+}
+
+void LaserDebugPage::measureLaserOnce()
+{
+    if (!applyProbeConfig()) {
+        return;
+    }
+
+    otms::device::LaserMeasurement measurement;
+    const otms::device::LaserStatus status =
+        otms::device::DeviceManager::instance().measureLaserOnce(measurement);
+    appendStatus(QStringLiteral("软件触发测量"), status);
+    if (status.ok()) {
+        showMeasurement(measurement);
+    }
 }
 
 bool LaserDebugPage::applyProbeConfig()

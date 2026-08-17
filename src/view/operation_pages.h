@@ -38,6 +38,7 @@ public slots:
 
 signals:
     void stageAxisAbsoluteMoveRequested(MotorAxis axis, double target);
+    void stageAxisRelativeMoveRequested(MotorAxis axis, double distance);
     void stageAbsoluteMoveRequested(double motorX, double motorY, double motorZ);
     void workpiecePointMoveRequested(double workpieceX, double workpieceY, double motorX, double motorY);
     void currentPositionExportRequested();
@@ -86,6 +87,7 @@ public:
 
 signals:
     void stageAxisAbsoluteMoveRequested(MotorAxis axis, double target);
+    void stageAxisRelativeMoveRequested(MotorAxis axis, double distance);
     void stageAbsoluteMoveRequested(double motorX, double motorY, double motorZ);
     void workpiecePointMoveRequested(double workpieceX, double workpieceY);
     void currentPositionExportRequested();
@@ -94,6 +96,9 @@ private slots:
     void requestXAxisMove();
     void requestYAxisMove();
     void requestZAxisMove();
+    void requestXAxisRelativeMove();
+    void requestYAxisRelativeMove();
+    void requestZAxisRelativeMove();
     void requestStageMove();
     void requestWorkpiecePointMove();
 
@@ -105,6 +110,9 @@ private:
     QDoubleSpinBox* motorXInput_{};
     QDoubleSpinBox* motorYInput_{};
     QDoubleSpinBox* motorZInput_{};
+    QDoubleSpinBox* motorXRelativeInput_{};
+    QDoubleSpinBox* motorYRelativeInput_{};
+    QDoubleSpinBox* motorZRelativeInput_{};
     QDoubleSpinBox* workpieceXInput_{};
     QDoubleSpinBox* workpieceYInput_{};
 };

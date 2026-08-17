@@ -1,15 +1,14 @@
 #pragma once
 
+#include "device_runtime_settings.h"
 #include "laser_probe.h"
 
 #include <memory>
 
 #include <QObject>
+#include <QTimer>
 
 namespace otms::device {
-
-// Set this before the first call to DeviceManager::instance().
-extern bool g_useVirtualLaserProbe;
 
 class DeviceManager final : public QObject
 {
@@ -49,6 +48,10 @@ public:
 signals:
     void laserConnectionChanged(bool connected, const QString& detail);
     void laserMeasurementStateChanged(bool measuring);
+    void laserMeasurementUpdated(const LaserMeasurement& measurement);
+
+private slots:
+    void pollLaserMeasurement();
 
 private:
     explicit DeviceManager(QObject* parent = nullptr);
@@ -60,6 +63,7 @@ private:
     bool laserEthernetConfigured_{};
     bool reportedLaserConnected_{};
     bool laserMeasuring_{};
+    QTimer laserMeasurementPollTimer_;
 };
 
 } // namespace otms::device

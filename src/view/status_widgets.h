@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../workflow/machine_state.h"
+
 #include <QStatusBar>
 #include <QWidget>
 
@@ -17,12 +19,17 @@ public:
 
 public slots:
     void setMotionConnectionState(bool connected);
-    void setMotorPositionMillimeters(double xMillimeters, double yMillimeters);
+    void setMotorPositionMillimeters(
+        double xMillimeters,
+        double yMillimeters,
+        double zMillimeters);
     void setLaserConnectionState(bool connected);
     void setLaserMeasurementMillimeters(double measurementMillimeters);
 
 signals:
     void emergencyStopRequested();
+    void resetRequested();
+    void doorLockCommandRequested(bool locked);
 
 private:
     QFrame* createMotorPositionCard();
@@ -31,6 +38,7 @@ private:
 
     QLabel* motorXPosition_{};
     QLabel* motorYPosition_{};
+    QLabel* motorZPosition_{};
     QLabel* laserMeasurement_{};
     bool motionConnected_{};
     bool laserConnected_{};
@@ -59,10 +67,28 @@ public:
     explicit RightStatusWidget(QWidget* parent = nullptr);
     void setMotionConnectionState(bool connected);
     void setProbeConnectionState(bool connected);
+    void setDoorLockState(bool available, bool locked);
+    void setLightCurtainState(bool available, bool clear);
+    void setMachineState(
+        otms::workflow::MachineState state,
+        otms::workflow::RunMode mode);
+
+signals:
+    void motionConnectionRequested();
+    void laserConnectionRequested();
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    QWidget* motionConnectionArea_{};
+    QWidget* laserConnectionArea_{};
     QLabel* motionState_{};
     QLabel* probeState_{};
+    QLabel* doorLockState_{};
+    QLabel* lightCurtainState_{};
+    QLabel* machineState_{};
+    QLabel* runMode_{};
 };
 
 class BottomStatusBar final : public QStatusBar

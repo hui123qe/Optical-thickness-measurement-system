@@ -1,8 +1,7 @@
 #include "measurement_task_controller.h"
 
 #include "../device/device_manager.h"
-#include "../motor/axis_manager.h"
-#include "../motor/motion_driver_factory.h"
+#include "../motor/motion_controller_manager.h"
 
 #include <cmath>
 #include <cstdint>
@@ -14,16 +13,27 @@ Q_LOGGING_CATEGORY(measurementWorkflowLog, "otms.workflow.measurement")
 
 namespace {
 
-constexpr int LogicalXAxis = 0;
-constexpr int LogicalYAxis = 1;
-constexpr int ControllerXAxis = 0;
-constexpr int ControllerYAxis = 1;
-constexpr double VirtualCountsPerMillimeter = 1000.0;
 constexpr int ArrivalPollIntervalMs = 20;
 constexpr int MotorStatusPollIntervalMs = 200;
 constexpr qint64 ArrivalTimeoutMs = 10000;
 constexpr double ArrivalToleranceMillimeters = 0.001;
 constexpr int RequiredArrivalSamples = 2;
+constexpr unsigned int XAxisMask = 1U << 0U;
+constexpr unsigned int YAxisMask = 1U << 1U;
+constexpr unsigned int ZAxisMask = 1U << 2U;
+
+unsigned int axisMask(otms::device::LogicalAxis axis)
+{
+    switch (axis) {
+    case otms::device::LogicalAxis::X:
+        return XAxisMask;
+    case otms::device::LogicalAxis::Y:
+        return YAxisMask;
+    case otms::device::LogicalAxis::Z:
+        return ZAxisMask;
+    }
+    return 0U;
+}
 
 QString logRunId(const QString& runId)
 {
@@ -47,9 +57,15 @@ QString taskResultName(TaskExecutor::TaskResult result)
 
 } // namespace
 
-MeasurementTaskController::MeasurementTaskController(TaskExecutor& executor, QObject* parent)
+MeasurementTaskController::MeasurementTaskController(
+    TaskExecutor& executor,
+    otms::device::MotionControllerManager& motionControllers,
+    otms::device::DeviceManager& devices,
+    QObject* parent)
     : QObject(parent)
     , executor_(executor)
+    , motionControllers_(motionControllers)
+    , devices_(devices)
 {
     arrivalPollTimer_.setInterval(ArrivalPollIntervalMs);
     arrivalPollTimer_.setTimerType(Qt::PreciseTimer);
@@ -71,26 +87,281 @@ MeasurementTaskController::MeasurementTaskController(TaskExecutor& executor, QOb
         this, &MeasurementTaskController::stopProbe);
     connect(&executor_, &TaskExecutor::taskFinished,
         this, &MeasurementTaskController::persistTaskLog);
+    connect(&executor_, &TaskExecutor::executionStarted,
+        this, [this](const QString&, quint64, const QString&, int) {
+            manualAxisMask_ = 0U;
+            setMachineState(
+                otms::workflow::MachineState::Running,
+                otms::workflow::RunMode::Automatic);
+        });
+    connect(&executor_, &TaskExecutor::executionCompleted,
+        this, [this](quint64, int) { finishRunning(); });
+    connect(&executor_, &TaskExecutor::executionTerminated,
+        this, [this](quint64) { finishRunning(); });
+    connect(&executor_, &TaskExecutor::executionFailed,
+        this, [this](quint64, const QString& reason) { enterMachineFault(reason); });
+    connect(&devices_, &otms::device::DeviceManager::laserConnectionChanged,
+        this, [this](bool connected, const QString&) {
+            probeReady_ = connected;
+            executor_.setProbeReady(databaseReady_ && probeReady_);
+        });
 
-    initializeVirtualDevices();
+    initializeDatabase();
+    probeReady_ = devices_.isLaserConnected();
+    executor_.setProbeReady(databaseReady_ && probeReady_);
     motorStatusPollTimer_.start();
+}
+
+otms::workflow::MachineState MeasurementTaskController::machineState() const
+{
+    return machineState_;
+}
+
+otms::workflow::RunMode MeasurementTaskController::runMode() const
+{
+    return runMode_;
+}
+
+QStringList MeasurementTaskController::motionControllerIds() const
+{
+    return motionControllers_.controllerIds();
+}
+
+bool MeasurementTaskController::isMotionControllerConnected(const QString& controllerId) const
+{
+    int connected = 0;
+    return motionControllers_.isControllerConnected(controllerId, connected) == 1
+        && connected != 0;
+}
+
+bool MeasurementTaskController::isLaserConnected() const
+{
+    return devices_.isLaserConnected();
+}
+
+bool MeasurementTaskController::setDoorLocked(bool locked)
+{
+    qCInfo(measurementWorkflowLog) << "Door lock command requested" << locked;
+    const int result = motionControllers_.setDoorLocked(locked);
+    if (result != 1) {
+        emit errorOccurred(
+            locked ? QStringLiteral("发送门锁锁定命令失败。")
+                   : QStringLiteral("发送门锁解锁命令失败。"));
+        return false;
+    }
+    return true;
+}
+
+bool MeasurementTaskController::connectMotionController(const QString& controllerId)
+{
+    qCInfo(measurementWorkflowLog) << "Motion controller connect requested" << controllerId;
+    if (motionControllers_.connectController(controllerId) != 1) {
+        emit errorOccurred(QStringLiteral("运动控制器 %1 连接失败。").arg(controllerId));
+        return false;
+    }
+    pollMotorStatus();
+    return true;
+}
+
+bool MeasurementTaskController::disconnectMotionController(const QString& controllerId)
+{
+    qCWarning(measurementWorkflowLog) << "Motion controller disconnect requested" << controllerId;
+    if (motionControllers_.disconnectController(controllerId) != 1) {
+        emit errorOccurred(QStringLiteral("运动控制器 %1 断开失败。").arg(controllerId));
+        return false;
+    }
+    pollMotorStatus();
+    return true;
+}
+
+bool MeasurementTaskController::connectLaser()
+{
+    qCInfo(measurementWorkflowLog) << "Laser connection requested";
+    const otms::device::LaserStatus status = devices_.connectLaserEthernet();
+    if (!status.ok()) {
+        emit errorOccurred(status.message);
+        return false;
+    }
+    updateStateFromConditions();
+    return true;
+}
+
+bool MeasurementTaskController::disconnectLaser()
+{
+    qCWarning(measurementWorkflowLog) << "Laser disconnection requested";
+    const otms::device::LaserStatus status = devices_.disconnectLaser();
+    if (!status.ok()) {
+        emit errorOccurred(status.message);
+        return false;
+    }
+    updateStateFromConditions();
+    return true;
+}
+
+bool MeasurementTaskController::moveAxisAbsolute(
+    otms::device::LogicalAxis axis,
+    double position)
+{
+    if (machineState_ != otms::workflow::MachineState::Ready) {
+        emit errorOccurred(QStringLiteral("机器未就绪，无法执行手动运动。"));
+        return false;
+    }
+    if (motionControllers_.moveAbsolute(axis, position, true) != 1) {
+        enterMachineFault(QStringLiteral("手动绝对定位命令失败。"));
+        return false;
+    }
+
+    manualAxisMask_ = axisMask(axis);
+    setMachineState(
+        otms::workflow::MachineState::Running,
+        otms::workflow::RunMode::Manual);
+    return true;
+}
+
+bool MeasurementTaskController::moveAxisRelative(
+    otms::device::LogicalAxis axis,
+    double distance)
+{
+    if (machineState_ != otms::workflow::MachineState::Ready) {
+        emit errorOccurred(QStringLiteral("机器未就绪，无法执行手动运动。"));
+        return false;
+    }
+    if (motionControllers_.moveRelative(axis, distance, true) != 1) {
+        enterMachineFault(QStringLiteral("手动相对移动命令失败。"));
+        return false;
+    }
+
+    manualAxisMask_ = axisMask(axis);
+    setMachineState(
+        otms::workflow::MachineState::Running,
+        otms::workflow::RunMode::Manual);
+    return true;
+}
+
+bool MeasurementTaskController::moveStageAbsolute(
+    double xPosition,
+    double yPosition,
+    double zPosition)
+{
+    if (machineState_ != otms::workflow::MachineState::Ready) {
+        emit errorOccurred(QStringLiteral("机器未就绪，无法执行手动运动。"));
+        return false;
+    }
+
+    const int xResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::X, xPosition, true);
+    const int yResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::Y, yPosition, true);
+    const int zResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::Z, zPosition, true);
+    if (xResult != 1 || yResult != 1 || zResult != 1) {
+        enterMachineFault(QStringLiteral("XYZ 联动绝对定位命令失败。"));
+        return false;
+    }
+
+    manualAxisMask_ = XAxisMask | YAxisMask | ZAxisMask;
+    setMachineState(
+        otms::workflow::MachineState::Running,
+        otms::workflow::RunMode::Manual);
+    return true;
+}
+
+bool MeasurementTaskController::moveWorkpiecePoint(double xPosition, double yPosition)
+{
+    if (machineState_ != otms::workflow::MachineState::Ready) {
+        emit errorOccurred(QStringLiteral("机器未就绪，无法执行手动运动。"));
+        return false;
+    }
+
+    const int xResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::X, xPosition, true);
+    const int yResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::Y, yPosition, true);
+    if (xResult != 1 || yResult != 1) {
+        enterMachineFault(QStringLiteral("物料测点手动定位命令失败。"));
+        return false;
+    }
+
+    manualAxisMask_ = XAxisMask | YAxisMask;
+    setMachineState(
+        otms::workflow::MachineState::Running,
+        otms::workflow::RunMode::Manual);
+    return true;
+}
+
+void MeasurementTaskController::startAutomaticTask(
+    const QString& taskType,
+    const QList<TaskExecutionPoint>& points)
+{
+    if (machineState_ != otms::workflow::MachineState::Ready) {
+        emit errorOccurred(QStringLiteral("机器未就绪，无法启动自动实验。"));
+        return;
+    }
+    executor_.start(taskType, points);
+}
+
+void MeasurementTaskController::emergencyStop()
+{
+    qCCritical(measurementWorkflowLog) << "Machine emergency stop requested";
+    if (executor_.phase() == TaskExecutor::ExecutionPhase::Moving
+        || executor_.phase() == TaskExecutor::ExecutionPhase::Measuring) {
+        executor_.terminate();
+    }
+    if (machineState_ == otms::workflow::MachineState::Fault) {
+        abortAllAxes();
+        return;
+    }
+    enterMachineFault(QStringLiteral("软件急停已触发。"));
+}
+
+bool MeasurementTaskController::resetMachineFault()
+{
+    if (machineState_ != otms::workflow::MachineState::Fault) {
+        emit errorOccurred(QStringLiteral("机器当前不处于故障状态，无需复位。"));
+        return false;
+    }
+    if (executor_.phase() == TaskExecutor::ExecutionPhase::Stopping) {
+        emit errorOccurred(QStringLiteral("设备仍在停止过程中，请稍后复位。"));
+        return false;
+    }
+    if (executor_.phase() == TaskExecutor::ExecutionPhase::Faulted) {
+        executor_.resetFault();
+    }
+
+    manualAxisMask_ = 0U;
+    setMachineState(
+        startupConditionsMet()
+            ? otms::workflow::MachineState::Ready
+            : otms::workflow::MachineState::NotReady,
+        runMode_);
+    return true;
 }
 
 void MeasurementTaskController::pollMotorStatus()
 {
-    otms::device::AxisManager& axes = otms::device::AxisManager::instance();
     int xConnected = 0;
     int yConnected = 0;
-    const bool connected = axes.isConnected(LogicalXAxis, xConnected) == 1
-        && axes.isConnected(LogicalYAxis, yConnected) == 1
+    int zConnected = 0;
+    const bool connected = motionControllers_.isAxisControllerConnected(
+                               otms::device::LogicalAxis::X,
+                               xConnected) == 1
+        && motionControllers_.isAxisControllerConnected(
+               otms::device::LogicalAxis::Y,
+               yConnected) == 1
+        && motionControllers_.isAxisControllerConnected(
+               otms::device::LogicalAxis::Z,
+               zConnected) == 1
         && xConnected != 0
-        && yConnected != 0;
+        && yConnected != 0
+        && zConnected != 0;
 
     double xPosition = 0.0;
     double yPosition = 0.0;
+    double zPosition = 0.0;
     const bool positionAvailable = connected
-        && axes.getPosition(LogicalXAxis, xPosition) == 1
-        && axes.getPosition(LogicalYAxis, yPosition) == 1;
+        && motionControllers_.getPosition(otms::device::LogicalAxis::X, xPosition) == 1
+        && motionControllers_.getPosition(otms::device::LogicalAxis::Y, yPosition) == 1
+        && motionControllers_.getPosition(otms::device::LogicalAxis::Z, zPosition) == 1;
     const bool motionAvailable = connected && positionAvailable;
 
     if (motionReady_ != motionAvailable) {
@@ -99,8 +370,147 @@ void MeasurementTaskController::pollMotorStatus()
         emit motionConnectionChanged(motionReady_);
     }
     if (motionAvailable) {
-        emit motorPositionChanged(xPosition, yPosition);
+        emit motorPositionChanged(xPosition, yPosition, zPosition);
     }
+
+    pollSafetyIo();
+    updateStateFromConditions();
+    pollManualMotion();
+}
+
+void MeasurementTaskController::pollSafetyIo()
+{
+    bool doorLocked = false;
+    const bool doorLockStateAvailable = motionControllers_.readDoorLocked(doorLocked) == 1;
+    if (doorLockStateAvailable_ != doorLockStateAvailable
+        || (doorLockStateAvailable && doorLocked_ != doorLocked)) {
+        doorLockStateAvailable_ = doorLockStateAvailable;
+        doorLocked_ = doorLocked;
+        emit doorLockStateChanged(doorLockStateAvailable_, doorLocked_);
+    }
+
+    bool lightCurtainClear = false;
+    const bool lightCurtainStateAvailable =
+        motionControllers_.readLightCurtainClear(lightCurtainClear) == 1;
+    if (lightCurtainStateAvailable_ != lightCurtainStateAvailable
+        || (lightCurtainStateAvailable && lightCurtainClear_ != lightCurtainClear)) {
+        lightCurtainStateAvailable_ = lightCurtainStateAvailable;
+        lightCurtainClear_ = lightCurtainClear;
+        emit lightCurtainStateChanged(lightCurtainStateAvailable_, lightCurtainClear_);
+    }
+}
+
+void MeasurementTaskController::pollManualMotion()
+{
+    if (machineState_ != otms::workflow::MachineState::Running
+        || runMode_ != otms::workflow::RunMode::Manual
+        || manualAxisMask_ == 0U) {
+        return;
+    }
+
+    const auto axisArrived = [this](otms::device::LogicalAxis axis, unsigned int mask) {
+        if ((manualAxisMask_ & mask) == 0U) {
+            return true;
+        }
+        int status = 0;
+        if (motionControllers_.getMotionStatus(axis, status) != 1) {
+            enterMachineFault(QStringLiteral("读取手动运动到位状态失败。"));
+            return false;
+        }
+        return status != 0;
+    };
+
+    const bool xArrived = axisArrived(otms::device::LogicalAxis::X, XAxisMask);
+    if (machineState_ == otms::workflow::MachineState::Fault) {
+        return;
+    }
+    const bool yArrived = axisArrived(otms::device::LogicalAxis::Y, YAxisMask);
+    if (machineState_ == otms::workflow::MachineState::Fault) {
+        return;
+    }
+    const bool zArrived = axisArrived(otms::device::LogicalAxis::Z, ZAxisMask);
+    if (xArrived && yArrived && zArrived) {
+        manualAxisMask_ = 0U;
+        finishRunning();
+    }
+}
+
+bool MeasurementTaskController::startupConditionsMet() const
+{
+    return databaseReady_
+        && motionReady_
+        && probeReady_
+        && doorLockStateAvailable_
+        && doorLocked_
+        && lightCurtainStateAvailable_
+        && lightCurtainClear_;
+}
+
+void MeasurementTaskController::updateStateFromConditions()
+{
+    const bool ready = startupConditionsMet();
+    if (machineState_ == otms::workflow::MachineState::NotReady && ready) {
+        setMachineState(otms::workflow::MachineState::Ready, runMode_);
+        return;
+    }
+    if (machineState_ == otms::workflow::MachineState::Ready && !ready) {
+        setMachineState(otms::workflow::MachineState::NotReady, runMode_);
+        return;
+    }
+    if (machineState_ == otms::workflow::MachineState::Running && !ready) {
+        enterMachineFault(QStringLiteral("运行中安全条件或设备就绪条件异常。"));
+    }
+}
+
+void MeasurementTaskController::finishRunning()
+{
+    if (machineState_ != otms::workflow::MachineState::Running) {
+        return;
+    }
+    manualAxisMask_ = 0U;
+    setMachineState(
+        startupConditionsMet()
+            ? otms::workflow::MachineState::Ready
+            : otms::workflow::MachineState::NotReady,
+        runMode_);
+}
+
+void MeasurementTaskController::enterMachineFault(const QString& reason)
+{
+    if (machineState_ == otms::workflow::MachineState::Fault) {
+        return;
+    }
+    qCCritical(measurementWorkflowLog).noquote()
+        << QStringLiteral("机器进入故障：%1").arg(reason);
+    abortAllAxes();
+    manualAxisMask_ = 0U;
+    setMachineState(otms::workflow::MachineState::Fault, runMode_);
+    emit errorOccurred(reason);
+}
+
+void MeasurementTaskController::setMachineState(
+    otms::workflow::MachineState state,
+    otms::workflow::RunMode mode)
+{
+    if (machineState_ == state && runMode_ == mode) {
+        return;
+    }
+    const otms::workflow::MachineState previousState = machineState_;
+    const otms::workflow::RunMode previousMode = runMode_;
+    machineState_ = state;
+    runMode_ = mode;
+    qCInfo(measurementWorkflowLog)
+        << "Machine state changed"
+        << static_cast<int>(previousState) << "->" << static_cast<int>(machineState_)
+        << "mode" << static_cast<int>(previousMode) << "->" << static_cast<int>(runMode_);
+    emit machineStateChanged(machineState_, runMode_);
+}
+
+void MeasurementTaskController::abortAllAxes()
+{
+    motionControllers_.abortAxis(otms::device::LogicalAxis::X);
+    motionControllers_.abortAxis(otms::device::LogicalAxis::Y);
+    motionControllers_.abortAxis(otms::device::LogicalAxis::Z);
 }
 
 void MeasurementTaskController::prepareExperiment(
@@ -165,9 +575,14 @@ void MeasurementTaskController::beginMove(
                .arg(point.motorTarget.x(), 0, 'f', 3)
                .arg(point.motorTarget.y(), 0, 'f', 3);
 
-    otms::device::AxisManager& axes = otms::device::AxisManager::instance();
-    const int xResult = axes.moveAbsolute(LogicalXAxis, point.motorTarget.x(), true);
-    const int yResult = axes.moveAbsolute(LogicalYAxis, point.motorTarget.y(), true);
+    const int xResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::X,
+        point.motorTarget.x(),
+        true);
+    const int yResult = motionControllers_.moveAbsolute(
+        otms::device::LogicalAxis::Y,
+        point.motorTarget.y(),
+        true);
     if (xResult != 1 || yResult != 1) {
         qCCritical(measurementWorkflowLog).noquote()
             << QStringLiteral("移动命令失败：runId=%1 point=%2 xResult=%3 yResult=%4")
@@ -175,8 +590,8 @@ void MeasurementTaskController::beginMove(
                    .arg(pointIndex + 1)
                    .arg(xResult)
                    .arg(yResult);
-        axes.abort(LogicalXAxis);
-        axes.abort(LogicalYAxis);
+        motionControllers_.abortAxis(otms::device::LogicalAxis::X);
+        motionControllers_.abortAxis(otms::device::LogicalAxis::Y);
         executor_.notifyMotionFailed(executionId, pointIndex, QStringLiteral("发送 X/Y 轴移动命令失败。"));
         return;
     }
@@ -197,15 +612,14 @@ void MeasurementTaskController::beginMove(
 
 void MeasurementTaskController::pollArrival()
 {
-    otms::device::AxisManager& axes = otms::device::AxisManager::instance();
     double xPosition = 0.0;
     double yPosition = 0.0;
     int xStatus = 0;
     int yStatus = 0;
-    if (axes.getPosition(LogicalXAxis, xPosition) != 1
-        || axes.getPosition(LogicalYAxis, yPosition) != 1
-        || axes.getMotionStatus(LogicalXAxis, xStatus) != 1
-        || axes.getMotionStatus(LogicalYAxis, yStatus) != 1) {
+    if (motionControllers_.getPosition(otms::device::LogicalAxis::X, xPosition) != 1
+        || motionControllers_.getPosition(otms::device::LogicalAxis::Y, yPosition) != 1
+        || motionControllers_.getMotionStatus(otms::device::LogicalAxis::X, xStatus) != 1
+        || motionControllers_.getMotionStatus(otms::device::LogicalAxis::Y, yStatus) != 1) {
         arrivalPollTimer_.stop();
         qCCritical(measurementWorkflowLog).noquote()
             << QStringLiteral("到位状态读取失败：runId=%1 point=%2 elapsed=%3ms")
@@ -252,8 +666,8 @@ void MeasurementTaskController::pollArrival()
                    .arg(xPosition, 0, 'f', 3)
                    .arg(yPosition, 0, 'f', 3)
                    .arg(arrivalWait_.elapsed());
-        axes.abort(LogicalXAxis);
-        axes.abort(LogicalYAxis);
+        motionControllers_.abortAxis(otms::device::LogicalAxis::X);
+        motionControllers_.abortAxis(otms::device::LogicalAxis::Y);
         executor_.notifyMotionFailed(
             activeExecutionId_, activePointIndex_, QStringLiteral("等待电机到位超时（10 秒）。"));
     }
@@ -274,8 +688,7 @@ void MeasurementTaskController::measurePoint(
                .arg(actualMotorPosition.x(), 0, 'f', 3)
                .arg(actualMotorPosition.y(), 0, 'f', 3);
     otms::device::LaserMeasurement measurement;
-    const otms::device::LaserStatus status =
-        otms::device::DeviceManager::instance().measureLaserOnce(measurement);
+    const otms::device::LaserStatus status = devices_.measureLaserOnce(measurement);
     if (!status.ok()) {
         qCCritical(measurementWorkflowLog).noquote()
             << QStringLiteral("激光采集失败：runId=%1 point=%2 code=%3 reason=%4")
@@ -344,9 +757,8 @@ void MeasurementTaskController::stopMotion(quint64 executionId)
     qCWarning(measurementWorkflowLog)
         << "Stopping motion for execution" << executionId;
     arrivalPollTimer_.stop();
-    otms::device::AxisManager& axes = otms::device::AxisManager::instance();
-    axes.abort(LogicalXAxis);
-    axes.abort(LogicalYAxis);
+    motionControllers_.abortAxis(otms::device::LogicalAxis::X);
+    motionControllers_.abortAxis(otms::device::LogicalAxis::Y);
     executor_.notifyMotionStopped(executionId);
 }
 
@@ -388,7 +800,7 @@ void MeasurementTaskController::persistTaskLog(
     emit taskLogChanged();
 }
 
-void MeasurementTaskController::initializeVirtualDevices()
+void MeasurementTaskController::initializeDatabase()
 {
     QString databaseError;
     databaseReady_ = database_.open(&databaseError);
@@ -397,61 +809,6 @@ void MeasurementTaskController::initializeVirtualDevices()
     if (!databaseReady_) {
         reportInitializationError(databaseError);
     }
-
-    if (!otms::device::g_useVirtualMotionDriver) {
-        reportInitializationError(QStringLiteral("真实运动控制器未配置，自动任务保持禁用。"));
-    } else {
-        motionDriver_ = otms::device::createMotionDriver(
-            QString(), otms::device::AgtioControllerType::Agc301);
-        otms::device::AxisManager& axes = otms::device::AxisManager::instance();
-        const bool mapped = axes.setAxisMapping(
-                                LogicalXAxis,
-                                motionDriver_,
-                                ControllerXAxis,
-                                VirtualCountsPerMillimeter)
-            && axes.setAxisMapping(
-                LogicalYAxis,
-                motionDriver_,
-                ControllerYAxis,
-                VirtualCountsPerMillimeter);
-        motionReady_ = mapped
-            && axes.connect(LogicalXAxis) == 1
-            && axes.enable(LogicalXAxis) == 1
-            && axes.enable(LogicalYAxis) == 1;
-        qCInfo(measurementWorkflowLog)
-            << "Virtual motion initialization" << "mapped" << mapped << "ready" << motionReady_;
-        if (!motionReady_) {
-            reportInitializationError(QStringLiteral("虚拟运动控制器连接或使能失败。"));
-        }
-    }
-
-    if (!otms::device::g_useVirtualLaserProbe) {
-        reportInitializationError(QStringLiteral("真实激光设备未配置，自动任务保持禁用。"));
-    } else {
-        otms::device::DeviceManager& devices = otms::device::DeviceManager::instance();
-        std::uint8_t programNumber = 0;
-        const otms::device::LaserStatus configurationStatus =
-            devices.loadLaserConfiguration(programNumber);
-        const otms::device::LaserStatus connectionStatus = configurationStatus.ok()
-            ? devices.connectLaserEthernet()
-            : configurationStatus;
-        const otms::device::LaserStatus enableStatus = connectionStatus.ok()
-            ? devices.enableLaser()
-            : connectionStatus;
-        probeReady_ = enableStatus.ok();
-        qCInfo(measurementWorkflowLog)
-            << "Virtual laser initialization" << "ready" << probeReady_
-            << "program" << programNumber << "status" << enableStatus.vendorCode;
-        if (!probeReady_) {
-            reportInitializationError(QStringLiteral("虚拟激光探头初始化失败：%1").arg(enableStatus.message));
-        }
-    }
-
-    executor_.setMotionDeviceReady(databaseReady_ && motionReady_);
-    executor_.setProbeReady(databaseReady_ && probeReady_);
-    QTimer::singleShot(0, this, [this] {
-        emit motionConnectionChanged(motionReady_);
-    });
 }
 
 void MeasurementTaskController::reportInitializationError(const QString& detail)

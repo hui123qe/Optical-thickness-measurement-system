@@ -164,11 +164,7 @@ void TaskExecutor::resetFault()
         emit executionRejected(QStringLiteral("执行器当前不处于故障状态。"));
         return;
     }
-    if (!motionDeviceReady_ || !probeReady_) {
-        emit executionRejected(QStringLiteral("运动设备和激光探头恢复就绪后才能复位故障。"));
-        return;
-    }
-    setPhase(ExecutionPhase::Idle, QStringLiteral("故障已复位，执行器恢复空闲。"));
+    setPhase(ExecutionPhase::Idle, QStringLiteral("软件故障已复位。"));
 }
 
 void TaskExecutor::notifyMotionCompleted(

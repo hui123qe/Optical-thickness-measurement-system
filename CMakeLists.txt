@@ -60,17 +60,16 @@ qt_add_executable(OpticalThicknessUi
     src/workflow/task_executor.h
     src/workflow/measurement_task_controller.cpp
     src/workflow/measurement_task_controller.h
+    src/workflow/machine_state.h
     src/data/measurement_database.cpp
     src/data/measurement_database.h
-    src/motor/motion_driver.h
+    src/motor/motion_controller.h
     src/motor/agtio_motion_driver.cpp
     src/motor/agtio_motion_driver.h
     src/motor/virtual_motion_driver.cpp
     src/motor/virtual_motion_driver.h
-    src/motor/motion_driver_factory.cpp
-    src/motor/motion_driver_factory.h
-    src/motor/axis_manager.cpp
-    src/motor/axis_manager.h
+    src/motor/motion_controller_manager.cpp
+    src/motor/motion_controller_manager.h
     src/device/laser_probe.h
     src/device/cl3000_laser_driver.cpp
     src/device/cl3000_laser_driver.h
@@ -78,6 +77,8 @@ qt_add_executable(OpticalThicknessUi
     src/device/virtual_laser_probe.h
     src/device/device_manager.cpp
     src/device/device_manager.h
+    src/device/device_runtime_settings.cpp
+    src/device/device_runtime_settings.h
     src/view/automatic_operation_widget.cpp
     src/view/automatic_operation_widget.h
     src/view/status_widgets.cpp

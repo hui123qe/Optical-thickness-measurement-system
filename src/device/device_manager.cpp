@@ -1,6 +1,7 @@
 #include "device_manager.h"
 
 #include "cl3000_laser_driver.h"
+#include "device_runtime_settings.h"
 #include "virtual_laser_probe.h"
 
 #include <cmath>
@@ -20,11 +21,10 @@ Q_LOGGING_CATEGORY(deviceManagerLog, "otms.device.manager")
 
 namespace otms::device {
 
-bool g_useVirtualLaserProbe = true;
-
 namespace {
 
 constexpr long DeviceConfigurationErrorCode = -1001;
+constexpr int LaserMeasurementPollingIntervalMs = 200;
 
 std::unique_ptr<ILaserProbe> createLaserProbe()
 {
@@ -268,6 +268,15 @@ LaserStatus saveStoredLaserConfiguration(const StoredLaserConfiguration& config)
         static_cast<qint64>(config.probe.softwareTriggerPulseWidth.count()));
 
     QJsonObject root;
+    QFile existingFile(path);
+    if (existingFile.open(QIODevice::ReadOnly)) {
+        QJsonParseError parseError;
+        const QJsonDocument existingDocument =
+            QJsonDocument::fromJson(existingFile.readAll(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && existingDocument.isObject()) {
+            root = existingDocument.object();
+        }
+    }
     root.insert(QStringLiteral("cl3000"), cl3000);
 
     QSaveFile file(path);
@@ -300,6 +309,12 @@ DeviceManager::DeviceManager(QObject* parent)
     : QObject(parent)
     , laserProbe_(createLaserProbe())
 {
+    laserMeasurementPollTimer_.setInterval(LaserMeasurementPollingIntervalMs);
+    connect(
+        &laserMeasurementPollTimer_,
+        &QTimer::timeout,
+        this,
+        &DeviceManager::pollLaserMeasurement);
 }
 
 LaserStatus DeviceManager::configureLaserProbe(const LaserProbeConfig& config)
@@ -465,7 +480,26 @@ void DeviceManager::setLaserMeasurementState(bool measuring)
     }
 
     laserMeasuring_ = measuring;
+    if (laserMeasuring_) {
+        laserMeasurementPollTimer_.start();
+    } else {
+        laserMeasurementPollTimer_.stop();
+    }
     emit laserMeasurementStateChanged(laserMeasuring_);
+}
+
+void DeviceManager::pollLaserMeasurement()
+{
+    if (!laserMeasuring_) {
+        laserMeasurementPollTimer_.stop();
+        return;
+    }
+
+    LaserMeasurement measurement;
+    const LaserStatus status = readLatestLaserMeasurement(measurement);
+    if (status.ok()) {
+        emit laserMeasurementUpdated(measurement);
+    }
 }
 
 LaserStatus DeviceManager::setLaserZero(LaserOutput output)

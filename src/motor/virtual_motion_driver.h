@@ -1,6 +1,6 @@
 #pragma once
 
-#include "motion_driver.h"
+#include "motion_controller.h"
 
 #include <chrono>
 #include <mutex>
@@ -8,17 +8,17 @@
 
 namespace otms::device {
 
-class VirtualMotionDriver final : public IMotionDriver
+class VirtualMotionController final : public IMotionController
 {
 public:
     int connect() override;
     int disconnect() override;
     int isConnected(int& connected) const override;
 
-    int enable(int axis) override;
-    int disable(int axis) override;
-    int isEnabled(int axis, int& enabled) const override;
-    int home(int axis, bool asynchronous = true, int timeoutSeconds = 10) override;
+    int enableAxis(int axis) override;
+    int disableAxis(int axis) override;
+    int isAxisEnabled(int axis, int& enabled) const override;
+    int homeAxis(int axis, bool asynchronous = true, int timeoutSeconds = 10) override;
 
     int moveAbsolute(
         int axis,
@@ -39,8 +39,12 @@ public:
 
     int setSpeed(int axis, int speedCountsPerSecond) override;
     int jog(int axis, int velocityCountsPerSecond) override;
-    int stop(int axis, bool asynchronous = true, int timeoutSeconds = 10) override;
-    int abort(int axis) override;
+    int stopAxis(int axis, bool asynchronous = true, int timeoutSeconds = 10) override;
+    int abortAxis(int axis) override;
+
+    int readDigitalInput(int point, bool& value) const override;
+    int readDigitalOutput(int point, bool& value) const override;
+    int writeDigitalOutput(int point, bool value) override;
 
     bool cncBegin() override;
     bool cncClearBuffer() override;
@@ -79,6 +83,8 @@ private:
 
     mutable std::mutex stateMutex_;
     mutable std::unordered_map<int, AxisState> axisStates_;
+    std::unordered_map<int, bool> digitalInputs_;
+    std::unordered_map<int, bool> digitalOutputs_;
     bool connected_{};
     bool cncActive_{};
 };

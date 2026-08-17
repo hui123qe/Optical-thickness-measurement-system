@@ -2,19 +2,19 @@
 
 namespace otms::device {
 
-class IMotionDriver
+class IMotionController
 {
 public:
-    virtual ~IMotionDriver() = default;
+    virtual ~IMotionController() = default;
 
     virtual int connect() = 0;
     virtual int disconnect() = 0;
     virtual int isConnected(int& connected) const = 0;
 
-    virtual int enable(int axis) = 0;
-    virtual int disable(int axis) = 0;
-    virtual int isEnabled(int axis, int& enabled) const = 0;
-    virtual int home(int axis, bool asynchronous = true, int timeoutSeconds = 10) = 0;
+    virtual int enableAxis(int axis) = 0;
+    virtual int disableAxis(int axis) = 0;
+    virtual int isAxisEnabled(int axis, int& enabled) const = 0;
+    virtual int homeAxis(int axis, bool asynchronous = true, int timeoutSeconds = 10) = 0;
 
     virtual int moveAbsolute(
         int axis,
@@ -35,8 +35,12 @@ public:
 
     virtual int setSpeed(int axis, int speedCountsPerSecond) = 0;
     virtual int jog(int axis, int velocityCountsPerSecond) = 0;
-    virtual int stop(int axis, bool asynchronous = true, int timeoutSeconds = 10) = 0;
-    virtual int abort(int axis) = 0;
+    virtual int stopAxis(int axis, bool asynchronous = true, int timeoutSeconds = 10) = 0;
+    virtual int abortAxis(int axis) = 0;
+
+    virtual int readDigitalInput(int point, bool& value) const = 0;
+    virtual int readDigitalOutput(int point, bool& value) const = 0;
+    virtual int writeDigitalOutput(int point, bool value) = 0;
 
     virtual bool cncBegin() = 0;
     virtual bool cncClearBuffer() = 0;

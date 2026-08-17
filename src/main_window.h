@@ -16,6 +16,8 @@ public:
 private:
     void setTaskState(const QString& state, const QString& detail, const QString& styleClass);
     void showPrototypeNotice(const QString& action);
+    void showMotionConnectionDialog();
+    void showLaserConnectionDialog();
 
     TopStatusWidget* topStatus_{};
     RightStatusWidget* rightStatus_{};
