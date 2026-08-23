@@ -78,4 +78,5 @@ private:
     QPushButton* resetButton_{};
     QPushButton* confirmButton_{};
     QPushButton* startButton_{};
+    QPushButton* terminateButton_{};
 };

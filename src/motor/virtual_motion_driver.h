@@ -83,7 +83,10 @@ private:
 
     mutable std::mutex stateMutex_;
     mutable std::unordered_map<int, AxisState> axisStates_;
-    std::unordered_map<int, bool> digitalInputs_;
+    std::unordered_map<int, bool> digitalInputs_{
+    {4, true},  // 门锁已锁定
+    {5, true}   // 光幕无遮挡
+};
     std::unordered_map<int, bool> digitalOutputs_;
     bool connected_{};
     bool cncActive_{};

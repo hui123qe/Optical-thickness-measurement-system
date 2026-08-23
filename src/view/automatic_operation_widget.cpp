@@ -164,12 +164,10 @@ AutomaticOperationWidget::AutomaticOperationWidget(QWidget* parent)
 
     QGroupBox* actionGroup = new QGroupBox(QStringLiteral("动作"));
     QVBoxLayout* actionLayout = new QVBoxLayout(actionGroup);
-    QPushButton* homeButton = new QPushButton(QStringLiteral("回零"));
     startButton_ = WidgetFactory::createPrimaryButton(QStringLiteral("测试开始"));
-    QPushButton* terminateButton = WidgetFactory::createDangerButton(QStringLiteral("终止"));
-    actionLayout->addWidget(homeButton);
+    terminateButton_ = WidgetFactory::createDangerButton(QStringLiteral("终止"));
     actionLayout->addWidget(startButton_);
-    actionLayout->addWidget(terminateButton);
+    actionLayout->addWidget(terminateButton_);
     actionLayout->addStretch();
     contentLayout->addWidget(actionGroup, 1);
 
@@ -192,7 +190,7 @@ AutomaticOperationWidget::AutomaticOperationWidget(QWidget* parent)
     connect(resetButton_, &QPushButton::clicked, this, &AutomaticOperationWidget::resetConfiguration);
     connect(confirmButton_, &QPushButton::clicked, this, &AutomaticOperationWidget::confirmConfiguration);
     connect(startButton_, &QPushButton::clicked, this, &AutomaticOperationWidget::startTask);
-    connect(terminateButton, &QPushButton::clicked, this, [this] {
+    connect(terminateButton_, &QPushButton::clicked, this, [this] {
         emit taskTerminationRequested();
     });
 
@@ -488,11 +486,13 @@ void AutomaticOperationWidget::startTask()
         return;
     }
 
-    emit workpiecePointQueuePrepared(confirmedConfiguration_.modeName(), *pointQueue);
     QMessageBox::information(
         this,
         QStringLiteral("任务摘要确认"),
         confirmedConfiguration_.summary()
             + QStringLiteral("\n\n已生成 %1 个物料坐标点并提交自动测量任务。")
                   .arg(pointQueue->size()));
+
+    emit workpiecePointQueuePrepared(confirmedConfiguration_.modeName(), *pointQueue);
+
 }

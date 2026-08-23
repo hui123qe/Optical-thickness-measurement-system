@@ -150,12 +150,41 @@ void TaskExecutor::terminate()
         emit executionRejected(QStringLiteral("任务正在停止。"));
         return;
     }
-    if (phase_ != ExecutionPhase::Moving && phase_ != ExecutionPhase::Measuring) {
+    if (phase_ != ExecutionPhase::Moving
+        && phase_ != ExecutionPhase::Measuring) {
         emit executionRejected(QStringLiteral("当前没有正在执行的任务。"));
         return;
     }
 
     beginStopping(TaskResult::Terminated, QStringLiteral("用户终止任务。"));
+}
+
+void TaskExecutor::failActiveTask(const QString& reason)
+{
+    if (phase_ != ExecutionPhase::Moving
+        && phase_ != ExecutionPhase::Measuring
+        && phase_ != ExecutionPhase::Stopping) {
+        return;
+    }
+
+    const QString detail = reason.trimmed().isEmpty()
+        ? QStringLiteral("机器故障导致任务结束。")
+        : reason;
+    qCCritical(taskExecutorLog).noquote()
+        << QStringLiteral("机器故障结束活动任务：runId=%1 phase=%2 reason=%3")
+               .arg(logRunId(taskRunId_))
+               .arg(static_cast<int>(phase_))
+               .arg(detail);
+
+    if (phase_ == ExecutionPhase::Moving
+        || phase_ == ExecutionPhase::Measuring) {
+        beginStopping(TaskResult::Failed, detail);
+        return;
+    }
+    if (phase_ == ExecutionPhase::Stopping) {
+        pendingStopResult_ = TaskResult::Failed;
+        pendingStopDetail_ = detail;
+    }
 }
 
 void TaskExecutor::resetFault()

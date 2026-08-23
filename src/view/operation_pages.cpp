@@ -53,6 +53,21 @@ QLabel* createColumnHeader(const QString& text)
     return header;
 }
 
+void updateAxisEnableBadge(QLabel* badge, bool available, bool enabled)
+{
+    badge->setText(
+        !available
+            ? QStringLiteral("未知")
+            : enabled ? QStringLiteral("已使能") : QStringLiteral("未使能"));
+    badge->setProperty(
+        "state",
+        !available
+            ? QStringLiteral("offline")
+            : enabled ? QStringLiteral("ready") : QStringLiteral("waiting"));
+    badge->style()->unpolish(badge);
+    badge->style()->polish(badge);
+}
+
 } // namespace
 
 MainPage::MainPage(QWidget* parent)
@@ -145,6 +160,13 @@ void MainPage::setLaserMeasurementState(bool measuring)
     updateLaserMeasurementControls();
 }
 
+void MainPage::setAxisEnableState(MotorAxis axis, bool available, bool enabled)
+{
+    if (manualControl_ != nullptr) {
+        manualControl_->setAxisEnableState(axis, available, enabled);
+    }
+}
+
 void MainPage::updateLaserMeasurementControls()
 {
     if (startLaserMeasurement_ == nullptr
@@ -169,16 +191,19 @@ void MainPage::updateLaserMeasurementControls()
 QTabWidget* MainPage::createOperationTabs()
 {
     QTabWidget* tabs = new QTabWidget;
-    ManualControlWidget* manualControl = new ManualControlWidget;
+    manualControl_ = new ManualControlWidget;
     AutomaticOperationWidget* automaticOperation = new AutomaticOperationWidget;
-    tabs->addTab(manualControl, QStringLiteral("手动控制"));
+    tabs->addTab(manualControl_, QStringLiteral("手动控制"));
     tabs->addTab(automaticOperation, QStringLiteral("自动化操作"));
 
-    connect(manualControl, &ManualControlWidget::stageAxisAbsoluteMoveRequested, this, &MainPage::stageAxisAbsoluteMoveRequested);
-    connect(manualControl, &ManualControlWidget::stageAxisRelativeMoveRequested, this, &MainPage::stageAxisRelativeMoveRequested);
-    connect(manualControl, &ManualControlWidget::stageAbsoluteMoveRequested, this, &MainPage::stageAbsoluteMoveRequested);
-    connect(manualControl, &ManualControlWidget::workpiecePointMoveRequested, this, &MainPage::forwardWorkpiecePointMove);
-    connect(manualControl, &ManualControlWidget::currentPositionExportRequested, this, &MainPage::currentPositionExportRequested);
+    connect(manualControl_, &ManualControlWidget::stageAxisAbsoluteMoveRequested, this, &MainPage::stageAxisAbsoluteMoveRequested);
+    connect(manualControl_, &ManualControlWidget::stageAxisRelativeMoveRequested, this, &MainPage::stageAxisRelativeMoveRequested);
+    connect(manualControl_, &ManualControlWidget::stageAxisHomeRequested, this, &MainPage::stageAxisHomeRequested);
+    connect(manualControl_, &ManualControlWidget::stageAxisEnableRequested, this, &MainPage::stageAxisEnableRequested);
+    connect(manualControl_, &ManualControlWidget::stageHomeRequested, this, &MainPage::stageHomeRequested);
+    connect(manualControl_, &ManualControlWidget::stageAbsoluteMoveRequested, this, &MainPage::stageAbsoluteMoveRequested);
+    connect(manualControl_, &ManualControlWidget::workpiecePointMoveRequested, this, &MainPage::forwardWorkpiecePointMove);
+    connect(manualControl_, &ManualControlWidget::currentPositionExportRequested, this, &MainPage::currentPositionExportRequested);
     connect(automaticOperation, &AutomaticOperationWidget::taskStateChangeRequested, this, &MainPage::taskStateChangeRequested);
     connect(automaticOperation, &AutomaticOperationWidget::workpiecePointQueuePrepared, this, &MainPage::prepareAutomaticMotorPointQueue);
     connect(automaticOperation, &AutomaticOperationWidget::taskTerminationRequested, this, &MainPage::taskTerminationRequested);
@@ -254,6 +279,8 @@ QGroupBox* ManualControlWidget::createAbsoluteMoveGroup()
     absoluteLayout->addWidget(createColumnHeader(QStringLiteral("绝对定位")), 0, 2);
     absoluteLayout->addWidget(createColumnHeader(QStringLiteral("相对位移")), 0, 3);
     absoluteLayout->addWidget(createColumnHeader(QStringLiteral("相对移动")), 0, 4);
+    absoluteLayout->addWidget(createColumnHeader(QStringLiteral("使能状态")), 0, 5);
+    absoluteLayout->addWidget(createColumnHeader(QStringLiteral("轴操作")), 0, 6);
 
     motorXInput_ = WidgetFactory::createCoordinateInput();
     motorYInput_ = WidgetFactory::createCoordinateInput();
@@ -270,34 +297,70 @@ QGroupBox* ManualControlWidget::createAbsoluteMoveGroup()
     QPushButton* moveXRelative = new QPushButton(QStringLiteral("X 相对移动"));
     QPushButton* moveYRelative = new QPushButton(QStringLiteral("Y 相对移动"));
     QPushButton* moveZRelative = new QPushButton(QStringLiteral("Z 相对移动"));
+    xAxisEnableState_ = WidgetFactory::createStatusBadge(
+        QStringLiteral("未知"), QStringLiteral("offline"));
+    yAxisEnableState_ = WidgetFactory::createStatusBadge(
+        QStringLiteral("未知"), QStringLiteral("offline"));
+    zAxisEnableState_ = WidgetFactory::createStatusBadge(
+        QStringLiteral("未知"), QStringLiteral("offline"));
+    const auto createAxisActions = [this](MotorAxis axis) {
+        QWidget* actions = new QWidget;
+        QHBoxLayout* actionsLayout = new QHBoxLayout(actions);
+        actionsLayout->setContentsMargins(0, 0, 0, 0);
+        actionsLayout->setSpacing(6);
+        QPushButton* home = new QPushButton(QStringLiteral("回零"));
+        QPushButton* enable = new QPushButton(QStringLiteral("使能"));
+        QPushButton* disable = new QPushButton(QStringLiteral("去使能"));
+        actionsLayout->addWidget(home);
+        actionsLayout->addWidget(enable);
+        actionsLayout->addWidget(disable);
+        connect(home, &QPushButton::clicked, this, [this, axis] {
+            emit stageAxisHomeRequested(axis);
+        });
+        connect(enable, &QPushButton::clicked, this, [this, axis] {
+            emit stageAxisEnableRequested(axis, true);
+        });
+        connect(disable, &QPushButton::clicked, this, [this, axis] {
+            emit stageAxisEnableRequested(axis, false);
+        });
+        return actions;
+    };
     absoluteLayout->addWidget(new QLabel(QStringLiteral("X")), 1, 0);
     absoluteLayout->addWidget(motorXInput_, 1, 1);
     absoluteLayout->addWidget(moveX, 1, 2);
     absoluteLayout->addWidget(motorXRelativeInput_, 1, 3);
     absoluteLayout->addWidget(moveXRelative, 1, 4);
+    absoluteLayout->addWidget(xAxisEnableState_, 1, 5, Qt::AlignCenter);
+    absoluteLayout->addWidget(createAxisActions(MotorAxis::X), 1, 6);
     absoluteLayout->addWidget(new QLabel(QStringLiteral("Y")), 2, 0);
     absoluteLayout->addWidget(motorYInput_, 2, 1);
     absoluteLayout->addWidget(moveY, 2, 2);
     absoluteLayout->addWidget(motorYRelativeInput_, 2, 3);
     absoluteLayout->addWidget(moveYRelative, 2, 4);
+    absoluteLayout->addWidget(yAxisEnableState_, 2, 5, Qt::AlignCenter);
+    absoluteLayout->addWidget(createAxisActions(MotorAxis::Y), 2, 6);
     absoluteLayout->addWidget(new QLabel(QStringLiteral("Z")), 3, 0);
     absoluteLayout->addWidget(motorZInput_, 3, 1);
     absoluteLayout->addWidget(moveZ, 3, 2);
     absoluteLayout->addWidget(motorZRelativeInput_, 3, 3);
     absoluteLayout->addWidget(moveZRelative, 3, 4);
+    absoluteLayout->addWidget(zAxisEnableState_, 3, 5, Qt::AlignCenter);
+    absoluteLayout->addWidget(createAxisActions(MotorAxis::Z), 3, 6);
     absoluteLayout->setColumnStretch(1, 1);
     absoluteLayout->setColumnStretch(3, 1);
 
     QLabel* absoluteHint = new QLabel(QStringLiteral("单轴操作请直接选择“绝对定位”或“相对移动”；相对位移允许输入正负值。"));
     absoluteHint->setWordWrap(true);
     absoluteHint->setProperty("role", "muted");
-    absoluteLayout->addWidget(absoluteHint, 4, 0, 1, 5);
+    absoluteLayout->addWidget(absoluteHint, 4, 0, 1, 7);
     QLabel* jointMoveHint = new QLabel(QStringLiteral("联合操作仅支持绝对坐标，将使用左侧 X/Y/Z 绝对目标。"));
     jointMoveHint->setWordWrap(true);
     jointMoveHint->setProperty("role", "warningText");
-    absoluteLayout->addWidget(jointMoveHint, 5, 0, 1, 5);
+    absoluteLayout->addWidget(jointMoveHint, 5, 0, 1, 7);
     QPushButton* absoluteMove = WidgetFactory::createPrimaryButton(QStringLiteral("XYZ 联动绝对定位"));
-    absoluteLayout->addWidget(absoluteMove, 6, 0, 1, 5);
+    QPushButton* homeStage = new QPushButton(QStringLiteral("XYZ 回零"));
+    absoluteLayout->addWidget(absoluteMove, 6, 0, 1, 3);
+    absoluteLayout->addWidget(homeStage, 6, 3, 1, 4);
 
     connect(moveX, &QPushButton::clicked, this, &ManualControlWidget::requestXAxisMove);
     connect(moveY, &QPushButton::clicked, this, &ManualControlWidget::requestYAxisMove);
@@ -309,7 +372,30 @@ QGroupBox* ManualControlWidget::createAbsoluteMoveGroup()
     connect(moveZRelative, &QPushButton::clicked,
         this, &ManualControlWidget::requestZAxisRelativeMove);
     connect(absoluteMove, &QPushButton::clicked, this, &ManualControlWidget::requestStageMove);
+    connect(homeStage, &QPushButton::clicked, this, &ManualControlWidget::stageHomeRequested);
     return absoluteGroup;
+}
+
+void ManualControlWidget::setAxisEnableState(
+    MotorAxis axis,
+    bool available,
+    bool enabled)
+{
+    QLabel* badge = nullptr;
+    switch (axis) {
+    case MotorAxis::X:
+        badge = xAxisEnableState_;
+        break;
+    case MotorAxis::Y:
+        badge = yAxisEnableState_;
+        break;
+    case MotorAxis::Z:
+        badge = zAxisEnableState_;
+        break;
+    }
+    if (badge != nullptr) {
+        updateAxisEnableBadge(badge, available, enabled);
+    }
 }
 
 QGroupBox* ManualControlWidget::createWorkpieceMoveGroup()

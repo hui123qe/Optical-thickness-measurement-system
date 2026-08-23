@@ -17,6 +17,7 @@ class QLabel;
 class QPushButton;
 class QString;
 class QTabWidget;
+class ManualControlWidget;
 
 enum class MotorAxis
 {
@@ -35,10 +36,14 @@ public:
 public slots:
     void setLaserConnectionState(bool connected);
     void setLaserMeasurementState(bool measuring);
+    void setAxisEnableState(MotorAxis axis, bool available, bool enabled);
 
 signals:
     void stageAxisAbsoluteMoveRequested(MotorAxis axis, double target);
     void stageAxisRelativeMoveRequested(MotorAxis axis, double distance);
+    void stageAxisHomeRequested(MotorAxis axis);
+    void stageAxisEnableRequested(MotorAxis axis, bool enabled);
+    void stageHomeRequested();
     void stageAbsoluteMoveRequested(double motorX, double motorY, double motorZ);
     void workpiecePointMoveRequested(double workpieceX, double workpieceY, double motorX, double motorY);
     void currentPositionExportRequested();
@@ -74,6 +79,7 @@ private:
     QPushButton* startLaserMeasurement_{};
     QPushButton* stopLaserMeasurement_{};
     QLabel* laserMeasurementState_{};
+    ManualControlWidget* manualControl_{};
     bool laserConnected_{};
     bool laserMeasuring_{};
 };
@@ -85,9 +91,15 @@ class ManualControlWidget final : public QWidget
 public:
     explicit ManualControlWidget(QWidget* parent = nullptr);
 
+public slots:
+    void setAxisEnableState(MotorAxis axis, bool available, bool enabled);
+
 signals:
     void stageAxisAbsoluteMoveRequested(MotorAxis axis, double target);
     void stageAxisRelativeMoveRequested(MotorAxis axis, double distance);
+    void stageAxisHomeRequested(MotorAxis axis);
+    void stageAxisEnableRequested(MotorAxis axis, bool enabled);
+    void stageHomeRequested();
     void stageAbsoluteMoveRequested(double motorX, double motorY, double motorZ);
     void workpiecePointMoveRequested(double workpieceX, double workpieceY);
     void currentPositionExportRequested();
@@ -115,4 +127,7 @@ private:
     QDoubleSpinBox* motorZRelativeInput_{};
     QDoubleSpinBox* workpieceXInput_{};
     QDoubleSpinBox* workpieceYInput_{};
+    QLabel* xAxisEnableState_{};
+    QLabel* yAxisEnableState_{};
+    QLabel* zAxisEnableState_{};
 };

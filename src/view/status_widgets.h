@@ -8,6 +8,7 @@
 class QLabel;
 class QListWidget;
 class QFrame;
+class QPushButton;
 class QString;
 
 class TopStatusWidget final : public QWidget
@@ -24,9 +25,12 @@ public slots:
         double yMillimeters,
         double zMillimeters);
     void setLaserConnectionState(bool connected);
+    void setLaserMeasurementState(bool measuring);
     void setLaserMeasurementMillimeters(double measurementMillimeters);
+    void setInitializationState(otms::workflow::InitializationState state);
 
 signals:
+    void initializationRequested();
     void emergencyStopRequested();
     void resetRequested();
     void doorLockCommandRequested(bool locked);
@@ -40,6 +44,7 @@ private:
     QLabel* motorYPosition_{};
     QLabel* motorZPosition_{};
     QLabel* laserMeasurement_{};
+    QPushButton* initializationButton_{};
     bool motionConnected_{};
     bool laserConnected_{};
 };
@@ -76,6 +81,7 @@ public:
 signals:
     void motionConnectionRequested();
     void laserConnectionRequested();
+    void runModeChangeRequested(otms::workflow::RunMode mode);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -89,6 +95,7 @@ private:
     QLabel* lightCurtainState_{};
     QLabel* machineState_{};
     QLabel* runMode_{};
+    otms::workflow::RunMode currentRunMode_{otms::workflow::RunMode::Manual};
 };
 
 class BottomStatusBar final : public QStatusBar

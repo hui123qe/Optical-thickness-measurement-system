@@ -60,6 +60,7 @@ public slots:
     void setProbeReady(bool ready);
     void start(const QString& taskType, const QList<TaskExecutionPoint>& points);
     void terminate();
+    void failActiveTask(const QString& reason);
     void resetFault();
 
     void notifyMotionCompleted(

@@ -27,6 +27,7 @@ public:
 
     [[nodiscard]] otms::workflow::MachineState machineState() const;
     [[nodiscard]] otms::workflow::RunMode runMode() const;
+    [[nodiscard]] otms::workflow::InitializationState initializationState() const;
     [[nodiscard]] QStringList motionControllerIds() const;
     [[nodiscard]] bool isMotionControllerConnected(const QString& controllerId) const;
     [[nodiscard]] bool isLaserConnected() const;
@@ -36,6 +37,11 @@ public:
     bool disconnectMotionController(const QString& controllerId);
     bool connectLaser();
     bool disconnectLaser();
+    bool switchRunMode(otms::workflow::RunMode mode);
+    bool initializeMachine();
+    bool homeAxis(otms::device::LogicalAxis axis);
+    bool homeStage();
+    bool setAxisEnabled(otms::device::LogicalAxis axis, bool enabled);
     bool moveAxisAbsolute(otms::device::LogicalAxis axis, double position);
     bool moveAxisRelative(otms::device::LogicalAxis axis, double distance);
     bool moveStageAbsolute(double xPosition, double yPosition, double zPosition);
@@ -52,13 +58,22 @@ signals:
         double xMillimeters,
         double yMillimeters,
         double zMillimeters);
+    void axisEnableStateChanged(
+        otms::device::LogicalAxis axis,
+        bool available,
+        bool enabled);
     void measurementAvailable(double measurementMillimeters);
     void doorLockStateChanged(bool available, bool locked);
     void lightCurtainStateChanged(bool available, bool clear);
     void machineStateChanged(
         otms::workflow::MachineState state,
         otms::workflow::RunMode mode);
+    void initializationStateChanged(
+        otms::workflow::InitializationState state,
+        const QString& detail);
     void taskLogChanged();
+    void operationRejected(const QString& detail);
+    void machineFaultOccurred(const QString& detail);
     void errorOccurred(const QString& detail);
 
 private slots:
@@ -92,14 +107,25 @@ private slots:
 private:
     void initializeDatabase();
     void pollSafetyIo();
-    void pollManualMotion();
+    void pollStandaloneMotion();
+    [[nodiscard]] bool manualOperationAllowed();
+    [[nodiscard]] bool manualAxisEnableOperationAllowed();
+    [[nodiscard]] bool initializationAllowed();
+    [[nodiscard]] bool safetyConditionsMet() const;
     [[nodiscard]] bool startupConditionsMet() const;
+    [[nodiscard]] bool runningConditionsMet() const;
+    [[nodiscard]] QString startupConditionFailureReason() const;
+    [[nodiscard]] QString safetyConditionFailureReason() const;
     void updateStateFromConditions();
     void finishRunning();
+    void failInitialization(const QString& reason);
     void enterMachineFault(const QString& reason);
-    void setMachineState(
-        otms::workflow::MachineState state,
-        otms::workflow::RunMode mode);
+    void rejectOperation(const QString& detail);
+    void setMachineState(otms::workflow::MachineState state);
+    void setRunMode(otms::workflow::RunMode mode);
+    void setInitializationState(
+        otms::workflow::InitializationState state,
+        const QString& detail);
     void abortAllAxes();
     void reportInitializationError(const QString& detail);
 
@@ -118,7 +144,15 @@ private:
     QString preparedExperimentRunId_;
     bool experimentPrepared_{};
     bool databaseReady_{};
+    bool motionConnected_{};
     bool motionReady_{};
+    bool axesEnabled_{};
+    bool xAxisEnableStateAvailable_{};
+    bool yAxisEnableStateAvailable_{};
+    bool zAxisEnableStateAvailable_{};
+    bool xAxisEnabled_{};
+    bool yAxisEnabled_{};
+    bool zAxisEnabled_{};
     bool probeReady_{};
     bool doorLockStateAvailable_{};
     bool doorLocked_{};
@@ -126,5 +160,7 @@ private:
     bool lightCurtainClear_{};
     otms::workflow::MachineState machineState_{otms::workflow::MachineState::NotReady};
     otms::workflow::RunMode runMode_{otms::workflow::RunMode::Manual};
-    unsigned int manualAxisMask_{};
+    otms::workflow::InitializationState initializationState_{
+        otms::workflow::InitializationState::NotStarted};
+    unsigned int standaloneMotionAxisMask_{};
 };

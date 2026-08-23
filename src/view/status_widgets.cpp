@@ -84,6 +84,16 @@ TopStatusWidget::TopStatusWidget(QWidget* parent)
     layout->addWidget(systemName);
     layout->addStretch();
 
+    initializationButton_ = WidgetFactory::createPrimaryButton(QStringLiteral("初始化"));
+    initializationButton_->setMinimumSize(88, 72);
+    initializationButton_->setToolTip(QStringLiteral("执行全轴使能和 XYZ 回零"));
+    connect(
+        initializationButton_,
+        &QPushButton::clicked,
+        this,
+        &TopStatusWidget::initializationRequested);
+    layout->addWidget(initializationButton_);
+
     QPushButton* unlockDoor = WidgetFactory::createPrimaryButton(QStringLiteral("开锁"));
     unlockDoor->setMinimumSize(72, 72);
     unlockDoor->setToolTip(QStringLiteral("发送门锁解锁命令"));
@@ -172,6 +182,13 @@ void TopStatusWidget::setLaserMeasurementMillimeters(double measurementMillimete
             : QStringLiteral("--"));
 }
 
+void TopStatusWidget::setLaserMeasurementState(bool measuring)
+{
+    if (!measuring) {
+        laserMeasurement_->setText(QStringLiteral("--"));
+    }
+}
+
 void TopStatusWidget::setMotionConnectionState(bool connected)
 {
     motionConnected_ = connected;
@@ -207,6 +224,30 @@ void TopStatusWidget::setLaserConnectionState(bool connected)
     laserConnected_ = connected;
     if (!laserConnected_) {
         laserMeasurement_->setText(QStringLiteral("--"));
+    }
+}
+
+void TopStatusWidget::setInitializationState(
+    otms::workflow::InitializationState state)
+{
+    const bool running = state == otms::workflow::InitializationState::Running;
+    initializationButton_->setEnabled(!running);
+    initializationButton_->setText(
+        running ? QStringLiteral("初始化中") : QStringLiteral("初始化"));
+
+    switch (state) {
+    case otms::workflow::InitializationState::NotStarted:
+        initializationButton_->setToolTip(QStringLiteral("执行全轴使能和 XYZ 回零"));
+        break;
+    case otms::workflow::InitializationState::Running:
+        initializationButton_->setToolTip(QStringLiteral("正在执行全轴使能和 XYZ 回零"));
+        break;
+    case otms::workflow::InitializationState::Completed:
+        initializationButton_->setToolTip(QStringLiteral("初始化已完成；点击可重新初始化"));
+        break;
+    case otms::workflow::InitializationState::Failed:
+        initializationButton_->setToolTip(QStringLiteral("初始化失败；点击可重试"));
+        break;
     }
 }
 
@@ -315,6 +356,9 @@ RightStatusWidget::RightStatusWidget(QWidget* parent)
     runMode_ = WidgetFactory::createStatusBadge(
         QStringLiteral("手动"),
         QStringLiteral("waiting"));
+    runMode_->setCursor(Qt::PointingHandCursor);
+    runMode_->setToolTip(QStringLiteral("点击切换手动/自动运行模式"));
+    runMode_->installEventFilter(this);
     machineLayout->addRow(QStringLiteral("运行模式"), runMode_);
     layout->addWidget(machine);
 
@@ -363,6 +407,14 @@ bool RightStatusWidget::eventFilter(QObject* watched, QEvent* event)
                 emit laserConnectionRequested();
                 return true;
             }
+            if (watchedWidget == runMode_) {
+                const otms::workflow::RunMode targetMode =
+                    currentRunMode_ == otms::workflow::RunMode::Manual
+                    ? otms::workflow::RunMode::Automatic
+                    : otms::workflow::RunMode::Manual;
+                emit runModeChangeRequested(targetMode);
+                return true;
+            }
         }
     }
     return QWidget::eventFilter(watched, event);
@@ -404,6 +456,7 @@ void RightStatusWidget::setMachineState(
     otms::workflow::MachineState state,
     otms::workflow::RunMode mode)
 {
+    currentRunMode_ = mode;
     QString stateText;
     QString stateStyle;
     switch (state) {
