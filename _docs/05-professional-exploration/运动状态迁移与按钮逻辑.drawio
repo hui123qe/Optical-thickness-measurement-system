@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="Electron" modified="2026-08-20T00:00:00.000Z" agent="hediet.vscode-drawio" version="24.7.17" type="device">
+  <diagram id="motion-state-logic" name="运动状态迁移与按钮逻辑">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="光学厚度测量系统：运动状态迁移与按钮逻辑" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1F2937;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1720" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="核心原则：MachineState 只保留 未就绪 / 就绪 / 运行中 / 故障；手动与自动模式使用不同的 Ready 推进条件；Homing 是初始化内部步骤。" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#4B5563;" vertex="1" parent="1">
+          <mxGeometry x="100" y="62" width="1600" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="buttonsPanel" value="1. 按钮与用户意图" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F8FAFC;strokeColor=#94A3B8;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="105" width="1720" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="modeButton" value="手动 / 自动&#xa;模式切换" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="75" y="160" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="initButton" value="初始化" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="285" y="160" width="150" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="manualButtons" value="手动动作&#xa;单轴/XYZ 回零、移动&#xa;单轴使能/去使能" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="485" y="148" width="210" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="startButton" value="开始" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="750" y="160" width="145" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="terminateButton" value="终止" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="945" y="160" width="145" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="estopButton" value="急停" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#DC2626;fontStyle=1;fontSize=14;fontColor=#991B1B;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="160" width="145" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="resetButton" value="故障复位" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1335" y="160" width="160" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="buttonNote" value="所有按钮只表达用户意图；运动许可、状态判断和硬件命令统一由业务控制层处理。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#F1F5F9;strokeColor=#64748B;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1530" y="145" width="195" height="85" as="geometry" />
+        </mxCell>
+
+        <mxCell id="readyPanel" value="2. Ready 的模式相关判定" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F8FAFC;strokeColor=#94A3B8;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="280" width="770" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="basicConditions" value="基础条件轮询结果&#xa;&#xa;数据库可用&#xa;控制器连接且位置可读&#xa;探头可用&#xa;门锁满足&#xa;光幕满足" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#64748B;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="70" y="345" width="180" height="165" as="geometry" />
+        </mxCell>
+        <mxCell id="modeDecision" value="当前模式？" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#4F46E5;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="295" y="385" width="130" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="manualReadyRule" value="手动 Ready 条件&#xa;&#xa;仅看基础条件结果&#xa;不依赖自动初始化结果" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="465" y="325" width="190" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="autoReadyRule" value="自动 Ready 条件&#xa;&#xa;基础条件满足&#xa;+&#xa;InitializationState = Completed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="465" y="455" width="190" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="derivedReady" value="派生设备状态&#xa;&#xa;条件满足 → Ready&#xa;条件不满足 → NotReady" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="685" y="385" width="105" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="initPanel" value="3. 初始化内部流程（独立于 MachineState 和测量任务阶段）" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#FFF7ED;strokeColor=#FB923C;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="840" y="280" width="920" height="315" as="geometry" />
+        </mxCell>
+        <mxCell id="initPrecondition" value="初始化入口校验&#xa;&#xa;自动模式&#xa;MachineState = NotReady&#xa;基础条件满足&#xa;当前无初始化流程" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#EA580C;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="870" y="340" width="180" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="clearErrorsStep" value="Step 1&#xa;清错&#xa;&#xa;清除控制器/驱动器&#xa;允许清除的故障" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7AA;strokeColor=#EA580C;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="350" width="155" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="enableAxesStep" value="Step 2&#xa;X/Y/Z 上使能&#xa;&#xa;命令成功&#xa;+ 状态确认成功" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7AA;strokeColor=#EA580C;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1280" y="350" width="155" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="homingStep" value="Step 3&#xa;Homing&#xa;&#xa;X/Y/Z 回零命令成功&#xa;+ 三轴回零完成确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7AA;strokeColor=#EA580C;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="350" width="165" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="initCompleted" value="初始化完成&#xa;&#xa;InitializationState&#xa;= Completed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1660" y="350" width="80" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="initFailure" value="任一步失败：中止相关动作，InitializationState = Failed，保持 NotReady，记录日志并弹窗。&#xa;控制器断线、机器故障、手动去使能等会使已完成的初始化结果失效。&#xa;后续增加清零、标定等动作时，在 Step 链中按顺序扩展。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#FFF1F2;strokeColor=#E11D48;fontSize=11;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1035" y="500" width="675" height="72" as="geometry" />
+        </mxCell>
+
+        <mxCell id="machinePanel" value="4. 设备状态机（MachineState）" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F8FAFC;strokeColor=#94A3B8;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="625" width="990" height="505" as="geometry" />
+        </mxCell>
+        <mxCell id="notReadyState" value="未就绪&#xa;NotReady" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FEF3C7;strokeColor=#D97706;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="95" y="755" width="140" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="readyState" value="就绪&#xa;Ready" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#DCFCE7;strokeColor=#16A34A;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="340" y="755" width="140" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="runningState" value="运行中&#xa;Running" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#EDE9FE;strokeColor=#7C3AED;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="590" y="755" width="140" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="faultState" value="故障&#xa;Fault" style="ellipse;whiteSpace=wrap;html=1;aspect=fixed;fillColor=#FEE2E2;strokeColor=#DC2626;fontStyle=1;fontSize=15;fontColor=#991B1B;" vertex="1" parent="1">
+          <mxGeometry x="840" y="755" width="140" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="manualGate" value="手动动作许可&#xa;&#xa;手动模式 + Ready&#xa;+ 当前动作自身前置条件&#xa;（例如目标轴已使能）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="315" y="650" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="resetEvaluate" value="复位后重新评估&#xa;&#xa;解除软件故障锁存&#xa;重新检查模式对应的 Ready 条件" style="rhombus;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="965" width="210" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="machineNote" value="终止是任务控制，不等同于急停。&#xa;急停或运行中安全条件丢失：先停止/中止设备，再进入 Fault，并写日志与弹窗。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#F1F5F9;strokeColor=#64748B;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="85" y="970" width="410" height="95" as="geometry" />
+        </mxCell>
+
+        <mxCell id="taskPanel" value="5. 自动任务执行阶段（仅在自动模式 Ready 后开始）" style="swimlane;html=1;rounded=1;startSize=30;fillColor=#F8FAFC;strokeColor=#94A3B8;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="625" width="700" height="505" as="geometry" />
+        </mxCell>
+        <mxCell id="startGate" value="开始许可&#xa;&#xa;自动模式&#xa;+ MachineState = Ready&#xa;+ TaskExecutor = Idle" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="690" width="170" height="115" as="geometry" />
+        </mxCell>
+        <mxCell id="movingPhase" value="Moving&#xa;移动到测点" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="705" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="measuringPhase" value="Measuring&#xa;测量当前点" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="705" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="stoppingPhase" value="Stopping&#xa;&#xa;等待运动设备和探头&#xa;分别确认停止" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1370" y="875" width="190" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="taskCompleted" value="任务结束&#xa;&#xa;Completed / Terminated&#xa;重新计算 Ready&#xa;&#xa;Failed → Fault" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#64748B;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1575" y="990" width="155" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="taskNote" value="TaskExecutor 不维护初始化步骤。Homing 属于初始化内部流程；测量任务只维护 Idle / Moving / Measuring / Stopping / Faulted 与最终结果。" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#F1F5F9;strokeColor=#64748B;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="1000" width="420" height="85" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_basic_mode" value="基础条件满足" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="basicConditions" target="modeDecision">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mode_manual" value="手动" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#2563EB;" edge="1" parent="1" source="modeDecision" target="manualReadyRule">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mode_auto" value="自动" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="modeDecision" target="autoReadyRule">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_manual_derived" value="计算" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="manualReadyRule" target="derivedReady">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_auto_derived" value="计算" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="autoReadyRule" target="derivedReady">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_init_clear" value="通过" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="initPrecondition" target="clearErrorsStep">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_clear_enable" value="清错成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="clearErrorsStep" target="enableAxesStep">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_enable_home" value="使能确认" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#EA580C;" edge="1" parent="1" source="enableAxesStep" target="homingStep">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_home_complete" value="回零确认" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="homingStep" target="initCompleted">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_init_ready_rule" value="自动 Ready 门槛" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#EA580C;" edge="1" parent="1" source="initCompleted" target="autoReadyRule">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1715" y="585" />
+              <mxPoint x="665" y="585" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_notready_ready" value="模式对应 Ready 条件满足" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;strokeWidth=2;" edge="1" parent="1" source="notReadyState" target="readyState">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ready_notready" value="条件丢失 / 切换到未初始化的自动模式" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#D97706;" edge="1" parent="1" source="readyState" target="notReadyState">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="410" y="925" />
+              <mxPoint x="165" y="925" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ready_running" value="手动动作接受 / 自动任务开始" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#7C3AED;strokeWidth=2;" edge="1" parent="1" source="readyState" target="runningState">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_running_ready" value="动作或任务完成且 Ready 条件仍满足" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="runningState" target="readyState">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="660" y="930" />
+              <mxPoint x="410" y="930" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_running_fault" value="急停 / 设备故障 / 运行中安全条件丢失" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#DC2626;strokeWidth=2;" edge="1" parent="1" source="runningState" target="faultState">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_fault_reset" value="复位按钮" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#7C3AED;" edge="1" parent="1" source="faultState" target="resetEvaluate">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_reset_notready" value="条件不足" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#D97706;" edge="1" parent="1" source="resetEvaluate" target="notReadyState">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="165" y="1095" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_reset_ready" value="手动基础条件满足，或自动条件全部满足" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="resetEvaluate" target="readyState">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="410" y="1095" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_start_move" value="任务接受" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#2563EB;strokeWidth=2;" edge="1" parent="1" source="startGate" target="movingPhase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_move_measure" value="当前点到位" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#7C3AED;" edge="1" parent="1" source="movingPhase" target="measuringPhase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_measure_move" value="仍有下一点" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#2563EB;" edge="1" parent="1" source="measuringPhase" target="movingPhase">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1615" y="825" />
+              <mxPoint x="1375" y="825" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_move_stop" value="终止 / 运动失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#D97706;" edge="1" parent="1" source="movingPhase" target="stoppingPhase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_measure_stop" value="终止 / 测量失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#D97706;" edge="1" parent="1" source="measuringPhase" target="stoppingPhase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_measure_complete" value="最后一点完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#16A34A;" edge="1" parent="1" source="measuringPhase" target="taskCompleted">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_stop_complete" value="停止确认完成" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#64748B;" edge="1" parent="1" source="stoppingPhase" target="taskCompleted">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_button_mode" value="切换并重新计算 Ready" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#2563EB;" edge="1" parent="1" source="modeButton" target="modeDecision">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_button_init" value="请求初始化" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#EA580C;" edge="1" parent="1" source="initButton" target="initPrecondition">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="360" y="265" />
+              <mxPoint x="960" y="265" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_button_manual" value="操作许可检查" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#2563EB;" edge="1" parent="1" source="manualButtons" target="manualGate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="590" y="610" />
+              <mxPoint x="410" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_button_start" value="开始许可检查" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#16A34A;" edge="1" parent="1" source="startButton" target="startGate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="825" y="610" />
+              <mxPoint x="1175" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_button_terminate" value="仅活动任务" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#D97706;" edge="1" parent="1" source="terminateButton" target="stoppingPhase">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1018" y="605" />
+              <mxPoint x="1465" y="605" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_button_estop" value="中止设备并锁存故障" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#DC2626;strokeWidth=2;" edge="1" parent="1" source="estopButton" target="faultState">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1212" y="600" />
+              <mxPoint x="910" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_button_reset" value="仅 Fault" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;dashed=1;strokeColor=#7C3AED;" edge="1" parent="1" source="resetButton" target="resetEvaluate">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1415" y="615" />
+              <mxPoint x="1015" y="615" />
+              <mxPoint x="1015" y="1028" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
