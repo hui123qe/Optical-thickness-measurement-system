@@ -22,17 +22,30 @@ constexpr unsigned int XAxisMask = 1U << 0U;
 constexpr unsigned int YAxisMask = 1U << 1U;
 constexpr unsigned int ZAxisMask = 1U << 2U;
 
-unsigned int axisMask(otms::device::LogicalAxis axis)
+const char* machineStateName(otms::workflow::MachineState state)
 {
-    switch (axis) {
-    case otms::device::LogicalAxis::X:
-        return XAxisMask;
-    case otms::device::LogicalAxis::Y:
-        return YAxisMask;
-    case otms::device::LogicalAxis::Z:
-        return ZAxisMask;
+    switch (state) {
+    case otms::workflow::MachineState::NotReady:
+        return "NotReady";
+    case otms::workflow::MachineState::Ready:
+        return "Ready";
+    case otms::workflow::MachineState::Running:
+        return "Running";
+    case otms::workflow::MachineState::Fault:
+        return "Fault";
     }
-    return 0U;
+    return "Unknown";
+}
+
+const char* runModeName(otms::workflow::RunMode mode)
+{
+    switch (mode) {
+    case otms::workflow::RunMode::Manual:
+        return "Manual";
+    case otms::workflow::RunMode::Automatic:
+        return "Automatic";
+    }
+    return "Unknown";
 }
 
 QString axisName(otms::device::LogicalAxis axis)
@@ -71,11 +84,13 @@ QString taskResultName(TaskExecutor::TaskResult result)
 } // namespace
 
 MeasurementTaskController::MeasurementTaskController(
+    otms::workflow::WorkflowPolicy& workflowPolicy,
     TaskExecutor& executor,
     otms::device::MotionControllerManager& motionControllers,
     otms::device::DeviceManager& devices,
     QObject* parent)
     : QObject(parent)
+    , workflowPolicy_(workflowPolicy)
     , executor_(executor)
     , motionControllers_(motionControllers)
     , devices_(devices)
@@ -102,7 +117,6 @@ MeasurementTaskController::MeasurementTaskController(
         this, &MeasurementTaskController::persistTaskLog);
     connect(&executor_, &TaskExecutor::executionStarted,
         this, [this](const QString&, quint64, const QString&, int) {
-            standaloneMotionAxisMask_ = 0U;
             setMachineState(otms::workflow::MachineState::Running);
         });
     connect(&executor_, &TaskExecutor::executionCompleted,
@@ -110,7 +124,7 @@ MeasurementTaskController::MeasurementTaskController(
     connect(&executor_, &TaskExecutor::executionTerminated,
         this, [this](quint64) { finishRunning(); });
     connect(&executor_, &TaskExecutor::executionFailed,
-        this, [this](quint64, const QString& reason) { enterMachineFault(reason); });
+        this, [this](quint64, const QString& reason) { handleTaskFailure(reason); });
     connect(&devices_, &otms::device::DeviceManager::laserConnectionChanged,
         this, [this](bool connected, const QString&) {
             probeReady_ = connected;
@@ -136,6 +150,11 @@ otms::workflow::RunMode MeasurementTaskController::runMode() const
 otms::workflow::InitializationState MeasurementTaskController::initializationState() const
 {
     return initializationState_;
+}
+
+otms::workflow::OperationProfile MeasurementTaskController::operationProfile() const
+{
+    return workflowPolicy_.profile();
 }
 
 QStringList MeasurementTaskController::motionControllerIds() const
@@ -219,16 +238,10 @@ bool MeasurementTaskController::switchRunMode(otms::workflow::RunMode mode)
     if (mode == runMode_) {
         return true;
     }
-    if (machineState_ == otms::workflow::MachineState::Running
-        || executor_.phase() == TaskExecutor::ExecutionPhase::Moving
+    if (executor_.phase() == TaskExecutor::ExecutionPhase::Moving
         || executor_.phase() == TaskExecutor::ExecutionPhase::Measuring
         || executor_.phase() == TaskExecutor::ExecutionPhase::Stopping) {
-        rejectOperation(QStringLiteral("机器或任务正在运行，无法切换运行模式。"));
-        return false;
-    }
-    if (machineState_ == otms::workflow::MachineState::Fault
-        || executor_.phase() == TaskExecutor::ExecutionPhase::Faulted) {
-        rejectOperation(QStringLiteral("机器处于故障状态，请复位后再切换运行模式。"));
+        rejectOperation(QStringLiteral("自动任务正在运行，无法切换运行模式。"));
         return false;
     }
 
@@ -236,10 +249,25 @@ bool MeasurementTaskController::switchRunMode(otms::workflow::RunMode mode)
     return true;
 }
 
+bool MeasurementTaskController::switchOperationProfile(
+    otms::workflow::OperationProfile profile)
+{
+    if (workflowPolicy_.profile() == profile) {
+        return true;
+    }
+
+    workflowPolicy_.setProfile(profile);
+    qCWarning(measurementWorkflowLog)
+        << "Operation profile changed"
+        << static_cast<int>(profile);
+    emit operationProfileChanged(profile);
+    return true;
+}
+
 bool MeasurementTaskController::initializeMachine()
 {
     qCInfo(measurementWorkflowLog) << "Machine initialization requested";
-    if (!initializationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::Initialization)) {
         return false;
     }
 
@@ -268,89 +296,42 @@ bool MeasurementTaskController::initializeMachine()
         return false;
     }
 
-    standaloneMotionAxisMask_ = XAxisMask | YAxisMask | ZAxisMask;
+    initializationMotionAxisMask_ = XAxisMask | YAxisMask | ZAxisMask;
     return true;
 }
 
-bool MeasurementTaskController::manualOperationAllowed()
+otms::workflow::WorkflowStateSnapshot MeasurementTaskController::workflowStateSnapshot() const
 {
-    if (runMode_ != otms::workflow::RunMode::Manual) {
-        rejectOperation(QStringLiteral("当前为自动模式，请先切换到手动模式。"));
-        return false;
-    }
-    if (initializationState_ == otms::workflow::InitializationState::Running) {
-        rejectOperation(QStringLiteral("机器正在初始化，无法执行手动运动。"));
-        return false;
-    }
-    if (machineState_ == otms::workflow::MachineState::Running) {
-        rejectOperation(QStringLiteral("机器正在运行，无法执行新的手动运动。"));
-        return false;
-    }
-    if (machineState_ == otms::workflow::MachineState::Fault) {
-        rejectOperation(QStringLiteral("机器处于故障状态，请先完成故障复位。"));
-        return false;
-    }
-    if (!motionConnected_) {
-        rejectOperation(QStringLiteral("运动控制器未连接，无法执行手动运动。"));
-        return false;
-    }
-    if (!safetyConditionsMet()) {
-        rejectOperation(safetyConditionFailureReason());
-        return false;
-    }
-    return true;
+    const TaskExecutor::ExecutionPhase executionPhase = executor_.phase();
+    otms::workflow::WorkflowStateSnapshot state;
+    state.machineState = machineState_;
+    state.runMode = runMode_;
+    state.initializationState = initializationState_;
+    state.automaticTaskInProgress =
+        executionPhase == TaskExecutor::ExecutionPhase::Moving
+        || executionPhase == TaskExecutor::ExecutionPhase::Measuring
+        || executionPhase == TaskExecutor::ExecutionPhase::Stopping;
+    state.motionConnected = motionConnected_;
+    state.safetyConditionsMet = safetyConditionsMet();
+    state.safetyFailureReason = safetyConditionFailureReason();
+    return state;
 }
 
-bool MeasurementTaskController::manualAxisEnableOperationAllowed()
+bool MeasurementTaskController::operationAllowed(
+    otms::workflow::OperationKind operation)
 {
-    if (runMode_ != otms::workflow::RunMode::Manual) {
-        rejectOperation(QStringLiteral("当前为自动模式，请先切换到手动模式。"));
+    const otms::workflow::OperationDecision decision =
+        workflowPolicy_.evaluate(operation, workflowStateSnapshot());
+    if (!decision.allowed) {
+        rejectOperation(decision.rejectionReason);
         return false;
     }
-    if (machineState_ == otms::workflow::MachineState::Running) {
-        rejectOperation(QStringLiteral("机器正在运行，无法改变轴使能状态。"));
-        return false;
-    }
-    if (machineState_ == otms::workflow::MachineState::Fault) {
-        rejectOperation(QStringLiteral("机器处于故障状态，请先完成故障复位。"));
-        return false;
-    }
-    if (!motionConnected_) {
-        rejectOperation(QStringLiteral("运动控制器未连接，无法改变轴使能状态。"));
-        return false;
-    }
-    if (initializationState_ == otms::workflow::InitializationState::Running) {
-        rejectOperation(QStringLiteral("机器正在初始化，无法改变轴使能状态。"));
-        return false;
-    }
-    if (!safetyConditionsMet()) {
-        rejectOperation(safetyConditionFailureReason());
-        return false;
-    }
-    return true;
-}
 
-bool MeasurementTaskController::initializationAllowed()
-{
-    if (initializationState_ == otms::workflow::InitializationState::Running) {
-        rejectOperation(QStringLiteral("机器正在初始化，请勿重复执行。"));
-        return false;
-    }
-    if (machineState_ == otms::workflow::MachineState::Running) {
-        rejectOperation(QStringLiteral("机器正在运行，无法执行初始化。"));
-        return false;
-    }
-    if (machineState_ == otms::workflow::MachineState::Fault) {
-        rejectOperation(QStringLiteral("机器处于故障状态，请先完成故障复位。"));
-        return false;
-    }
-    if (!motionConnected_) {
-        rejectOperation(QStringLiteral("运动控制器未连接，无法执行初始化。"));
-        return false;
-    }
-    if (!safetyConditionsMet()) {
-        rejectOperation(safetyConditionFailureReason());
-        return false;
+    if (decision.bypassed) {
+        qCWarning(measurementWorkflowLog).noquote()
+            << QStringLiteral("调试旁路放行操作 %1，已忽略：%2")
+                   .arg(static_cast<int>(operation))
+                   .arg(decision.bypassedConditions.join(QStringLiteral("、")));
     }
     return true;
 }
@@ -358,23 +339,21 @@ bool MeasurementTaskController::initializationAllowed()
 bool MeasurementTaskController::homeAxis(otms::device::LogicalAxis axis)
 {
     qCInfo(measurementWorkflowLog) << "Manual axis home requested" << axisName(axis);
-    if (!manualOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
     if (motionControllers_.homeAxis(axis, true) != 1) {
-        enterMachineFault(QStringLiteral("%1 轴回零命令失败。").arg(axisName(axis)));
+        reportOperationFailure(QStringLiteral("%1 轴回零命令失败。").arg(axisName(axis)));
         return false;
     }
 
-    standaloneMotionAxisMask_ = axisMask(axis);
-    setMachineState(otms::workflow::MachineState::Running);
     return true;
 }
 
 bool MeasurementTaskController::homeStage()
 {
     qCInfo(measurementWorkflowLog) << "Manual XYZ home requested";
-    if (!manualOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
 
@@ -382,12 +361,10 @@ bool MeasurementTaskController::homeStage()
     const int yResult = motionControllers_.homeAxis(otms::device::LogicalAxis::Y, true);
     const int zResult = motionControllers_.homeAxis(otms::device::LogicalAxis::Z, true);
     if (xResult != 1 || yResult != 1 || zResult != 1) {
-        enterMachineFault(QStringLiteral("XYZ 轴回零命令失败。"));
+        reportOperationFailure(QStringLiteral("XYZ 轴回零命令失败。"));
         return false;
     }
 
-    standaloneMotionAxisMask_ = XAxisMask | YAxisMask | ZAxisMask;
-    setMachineState(otms::workflow::MachineState::Running);
     return true;
 }
 
@@ -397,7 +374,7 @@ bool MeasurementTaskController::setAxisEnabled(
 {
     qCInfo(measurementWorkflowLog)
         << "Manual axis enable command requested" << axisName(axis) << enabled;
-    if (!manualAxisEnableOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualAxisEnable)) {
         return false;
     }
 
@@ -419,16 +396,14 @@ bool MeasurementTaskController::moveAxisAbsolute(
     otms::device::LogicalAxis axis,
     double position)
 {
-    if (!manualOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
     if (motionControllers_.moveAbsolute(axis, position, true) != 1) {
-        enterMachineFault(QStringLiteral("手动绝对定位命令失败。"));
+        reportOperationFailure(QStringLiteral("手动绝对定位命令失败。"));
         return false;
     }
 
-    standaloneMotionAxisMask_ = axisMask(axis);
-    setMachineState(otms::workflow::MachineState::Running);
     return true;
 }
 
@@ -436,16 +411,14 @@ bool MeasurementTaskController::moveAxisRelative(
     otms::device::LogicalAxis axis,
     double distance)
 {
-    if (!manualOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
     if (motionControllers_.moveRelative(axis, distance, true) != 1) {
-        enterMachineFault(QStringLiteral("手动相对移动命令失败。"));
+        reportOperationFailure(QStringLiteral("手动相对移动命令失败。"));
         return false;
     }
 
-    standaloneMotionAxisMask_ = axisMask(axis);
-    setMachineState(otms::workflow::MachineState::Running);
     return true;
 }
 
@@ -454,7 +427,7 @@ bool MeasurementTaskController::moveStageAbsolute(
     double yPosition,
     double zPosition)
 {
-    if (!manualOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
 
@@ -465,18 +438,16 @@ bool MeasurementTaskController::moveStageAbsolute(
     const int zResult = motionControllers_.moveAbsolute(
         otms::device::LogicalAxis::Z, zPosition, true);
     if (xResult != 1 || yResult != 1 || zResult != 1) {
-        enterMachineFault(QStringLiteral("XYZ 联动绝对定位命令失败。"));
+        reportOperationFailure(QStringLiteral("XYZ 联动绝对定位命令失败。"));
         return false;
     }
 
-    standaloneMotionAxisMask_ = XAxisMask | YAxisMask | ZAxisMask;
-    setMachineState(otms::workflow::MachineState::Running);
     return true;
 }
 
 bool MeasurementTaskController::moveWorkpiecePoint(double xPosition, double yPosition)
 {
-    if (!manualOperationAllowed()) {
+    if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
 
@@ -485,12 +456,10 @@ bool MeasurementTaskController::moveWorkpiecePoint(double xPosition, double yPos
     const int yResult = motionControllers_.moveAbsolute(
         otms::device::LogicalAxis::Y, yPosition, true);
     if (xResult != 1 || yResult != 1) {
-        enterMachineFault(QStringLiteral("物料测点手动定位命令失败。"));
+        reportOperationFailure(QStringLiteral("物料测点手动定位命令失败。"));
         return false;
     }
 
-    standaloneMotionAxisMask_ = XAxisMask | YAxisMask;
-    setMachineState(otms::workflow::MachineState::Running);
     return true;
 }
 
@@ -498,12 +467,7 @@ void MeasurementTaskController::startAutomaticTask(
     const QString& taskType,
     const QList<TaskExecutionPoint>& points)
 {
-    if (runMode_ != otms::workflow::RunMode::Automatic) {
-        rejectOperation(QStringLiteral("当前为手动模式，请先切换到自动模式。"));
-        return;
-    }
-    if (machineState_ != otms::workflow::MachineState::Ready) {
-        rejectOperation(QStringLiteral("机器未就绪，无法启动自动实验。"));
+    if (!operationAllowed(otms::workflow::OperationKind::AutomaticTask)) {
         return;
     }
     executor_.start(taskType, points);
@@ -511,15 +475,6 @@ void MeasurementTaskController::startAutomaticTask(
 
 void MeasurementTaskController::emergencyStop()
 {
-    qCCritical(measurementWorkflowLog) << "Machine emergency stop requested";
-    if (executor_.phase() == TaskExecutor::ExecutionPhase::Moving
-        || executor_.phase() == TaskExecutor::ExecutionPhase::Measuring) {
-        executor_.terminate();
-    }
-    if (machineState_ == otms::workflow::MachineState::Fault) {
-        abortAllAxes();
-        return;
-    }
     enterMachineFault(QStringLiteral("软件急停已触发。"));
 }
 
@@ -539,7 +494,7 @@ bool MeasurementTaskController::resetMachineFault()
         executor_.resetFault();
     }
 
-    standaloneMotionAxisMask_ = 0U;
+    initializationMotionAxisMask_ = 0U;
     setMachineState(
         startupConditionsMet()
             ? otms::workflow::MachineState::Ready
@@ -644,7 +599,7 @@ void MeasurementTaskController::pollMotorStatus()
 
     pollSafetyIo();
     updateStateFromConditions();
-    pollStandaloneMotion();
+    pollInitializationMotion();
 }
 
 void MeasurementTaskController::pollSafetyIo()
@@ -669,31 +624,23 @@ void MeasurementTaskController::pollSafetyIo()
     }
 }
 
-void MeasurementTaskController::pollStandaloneMotion()
+void MeasurementTaskController::pollInitializationMotion()
 {
-    const bool initializationRunning =
-        initializationState_ == otms::workflow::InitializationState::Running;
-    if ((machineState_ != otms::workflow::MachineState::Running && !initializationRunning)
-        || standaloneMotionAxisMask_ == 0U) {
+    if (initializationState_ != otms::workflow::InitializationState::Running
+        || initializationMotionAxisMask_ == 0U) {
         return;
     }
 
     const auto axisArrived =
-        [this, initializationRunning](otms::device::LogicalAxis axis, unsigned int mask) {
-        if ((standaloneMotionAxisMask_ & mask) == 0U) {
+        [this](otms::device::LogicalAxis axis, unsigned int mask) {
+        if ((initializationMotionAxisMask_ & mask) == 0U) {
             return true;
         }
         int status = 0;
         if (motionControllers_.getMotionStatus(axis, status) != 1) {
-            const QString reason = initializationRunning
-                ? QStringLiteral("初始化过程中读取回零状态失败。")
-                : QStringLiteral("读取独立运动到位状态失败。");
-            if (initializationRunning) {
-                abortAllAxes();
-                failInitialization(reason);
-            } else {
-                enterMachineFault(reason);
-            }
+            const QString reason = QStringLiteral("初始化过程中读取回零状态失败。");
+            abortAllAxes();
+            failInitialization(reason);
             return false;
         }
         return status != 0;
@@ -711,16 +658,11 @@ void MeasurementTaskController::pollStandaloneMotion()
     }
     const bool zArrived = axisArrived(otms::device::LogicalAxis::Z, ZAxisMask);
     if (xArrived && yArrived && zArrived) {
-        if (initializationRunning) {
-            standaloneMotionAxisMask_ = 0U;
-            setInitializationState(
-                otms::workflow::InitializationState::Completed,
-                QStringLiteral("全轴使能和 XYZ 回零已完成。"));
-            updateStateFromConditions();
-            return;
-        }
-        standaloneMotionAxisMask_ = 0U;
-        finishRunning();
+        initializationMotionAxisMask_ = 0U;
+        setInitializationState(
+            otms::workflow::InitializationState::Completed,
+            QStringLiteral("全轴使能和 XYZ 回零已完成。"));
+        updateStateFromConditions();
     }
 }
 
@@ -739,14 +681,6 @@ bool MeasurementTaskController::startupConditionsMet() const
         && motionReady_
         && probeReady_
         && safetyConditionsMet();
-}
-
-bool MeasurementTaskController::runningConditionsMet() const
-{
-    if (runMode_ == otms::workflow::RunMode::Automatic) {
-        return startupConditionsMet();
-    }
-    return motionConnected_ && safetyConditionsMet();
 }
 
 QString MeasurementTaskController::startupConditionFailureReason() const
@@ -804,7 +738,8 @@ QString MeasurementTaskController::safetyConditionFailureReason() const
 
 void MeasurementTaskController::updateStateFromConditions()
 {
-    if (initializationState_ == otms::workflow::InitializationState::Running
+    if (workflowPolicy_.enforcesStateGuards()
+        && initializationState_ == otms::workflow::InitializationState::Running
         && (!motionConnected_ || !axesEnabled_ || !safetyConditionsMet())) {
         abortAllAxes();
         QString reason;
@@ -828,17 +763,10 @@ void MeasurementTaskController::updateStateFromConditions()
         setMachineState(otms::workflow::MachineState::NotReady);
         return;
     }
-    if (machineState_ == otms::workflow::MachineState::Running
-        && !runningConditionsMet()) {
-        QString reason;
-        if (runMode_ == otms::workflow::RunMode::Automatic) {
-            reason = startupConditionFailureReason();
-        } else if (!motionConnected_) {
-            reason = QStringLiteral("运行中运动控制器连接丢失。");
-        } else {
-            reason = safetyConditionFailureReason();
-        }
-        enterMachineFault(reason);
+    if (workflowPolicy_.latchesOperationalFaults()
+        && machineState_ == otms::workflow::MachineState::Running
+        && !startupConditionsMet()) {
+        enterMachineFault(startupConditionFailureReason());
     }
 }
 
@@ -847,11 +775,30 @@ void MeasurementTaskController::finishRunning()
     if (machineState_ != otms::workflow::MachineState::Running) {
         return;
     }
-    standaloneMotionAxisMask_ = 0U;
     setMachineState(
         startupConditionsMet()
             ? otms::workflow::MachineState::Ready
             : otms::workflow::MachineState::NotReady);
+}
+
+void MeasurementTaskController::handleTaskFailure(const QString& reason)
+{
+    if (machineState_ == otms::workflow::MachineState::Fault) {
+        return;
+    }
+    if (workflowPolicy_.latchesOperationalFaults()
+        && (!motionConnected_ || !axesEnabled_ || !motionReady_ || !safetyConditionsMet())) {
+        enterMachineFault(reason);
+        return;
+    }
+
+    qCWarning(measurementWorkflowLog).noquote()
+        << QStringLiteral("自动任务执行失败：%1").arg(reason);
+    if (executor_.phase() == TaskExecutor::ExecutionPhase::Faulted) {
+        executor_.resetFault();
+    }
+    finishRunning();
+    emit errorOccurred(reason);
 }
 
 void MeasurementTaskController::failInitialization(const QString& reason)
@@ -861,7 +808,7 @@ void MeasurementTaskController::failInitialization(const QString& reason)
     }
     qCWarning(measurementWorkflowLog).noquote()
         << QStringLiteral("初始化失败：%1").arg(reason);
-    standaloneMotionAxisMask_ = 0U;
+    initializationMotionAxisMask_ = 0U;
     setInitializationState(otms::workflow::InitializationState::Failed, reason);
     setMachineState(otms::workflow::MachineState::NotReady);
     emit errorOccurred(reason);
@@ -869,19 +816,28 @@ void MeasurementTaskController::failInitialization(const QString& reason)
 
 void MeasurementTaskController::enterMachineFault(const QString& reason)
 {
+    abortAllAxes();
+    arrivalPollTimer_.stop();
+    initializationMotionAxisMask_ = 0U;
     if (machineState_ == otms::workflow::MachineState::Fault) {
         return;
     }
     qCCritical(measurementWorkflowLog).noquote()
         << QStringLiteral("机器进入故障：%1").arg(reason);
-    arrivalPollTimer_.stop();
-    abortAllAxes();
-    standaloneMotionAxisMask_ = 0U;
-    setInitializationState(otms::workflow::InitializationState::Failed, reason);
+    if (initializationState_ == otms::workflow::InitializationState::Running) {
+        setInitializationState(otms::workflow::InitializationState::Failed, reason);
+    }
     setMachineState(otms::workflow::MachineState::Fault);
     executor_.failActiveTask(reason);
     emit errorOccurred(reason);
     emit machineFaultOccurred(reason);
+}
+
+void MeasurementTaskController::reportOperationFailure(const QString& detail)
+{
+    qCWarning(measurementWorkflowLog).noquote()
+        << QStringLiteral("操作执行失败：%1").arg(detail);
+    emit errorOccurred(detail);
 }
 
 void MeasurementTaskController::rejectOperation(const QString& detail)
@@ -899,8 +855,8 @@ void MeasurementTaskController::setMachineState(otms::workflow::MachineState sta
     machineState_ = state;
     qCInfo(measurementWorkflowLog)
         << "Machine state changed"
-        << static_cast<int>(previousState) << "->" << static_cast<int>(machineState_);
-    emit machineStateChanged(machineState_, runMode_);
+        << machineStateName(previousState) << "->" << machineStateName(machineState_);
+    emit machineStateChanged(machineState_);
 }
 
 void MeasurementTaskController::setRunMode(otms::workflow::RunMode mode)
@@ -912,8 +868,8 @@ void MeasurementTaskController::setRunMode(otms::workflow::RunMode mode)
     runMode_ = mode;
     qCInfo(measurementWorkflowLog)
         << "Run mode changed"
-        << static_cast<int>(previousMode) << "->" << static_cast<int>(runMode_);
-    emit machineStateChanged(machineState_, runMode_);
+        << runModeName(previousMode) << "->" << runModeName(runMode_);
+    emit runModeChanged(runMode_);
 }
 
 void MeasurementTaskController::setInitializationState(
@@ -1183,7 +1139,7 @@ void MeasurementTaskController::stopMotion(quint64 executionId)
     qCWarning(measurementWorkflowLog)
         << "Stopping motion for execution" << executionId;
     arrivalPollTimer_.stop();
-    standaloneMotionAxisMask_ = 0U;
+    initializationMotionAxisMask_ = 0U;
     abortAllAxes();
     executor_.notifyMotionStopped(executionId);
 }

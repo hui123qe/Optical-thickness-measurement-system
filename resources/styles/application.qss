@@ -237,6 +237,22 @@ QPushButton[role="primary"]:hover {
     background: #125b8c;
 }
 
+QPushButton[debugBypass="true"] {
+    background: #c2410c;
+    border-color: #9a3412;
+    color: white;
+    font-weight: 700;
+}
+
+QPushButton[debugBypass="true"]:hover {
+    background: #ea580c;
+    border-color: #c2410c;
+}
+
+QPushButton[debugBypass="true"]:pressed {
+    background: #9a3412;
+}
+
 QPushButton[role="danger"] {
     background: #fff7f6;
     border-color: #dc746c;

@@ -171,9 +171,29 @@ MainWindow::MainWindow(QWidget* parent)
 
     setCentralWidget(root);
     setStatusBar(new BottomStatusBar(this));
-    taskExecutor_ = new TaskExecutor(this);
+    taskExecutor_ = new TaskExecutor(workflowPolicy_, this);
 
     otms::device::DeviceManager& deviceManager = otms::device::DeviceManager::instance();
+    connectDeviceSignals(deviceManager, mainPage);
+    otms::device::MotionControllerManager& motionControllers =
+        otms::device::MotionControllerManager::instance();
+    measurementTaskController_ = new MeasurementTaskController(
+        workflowPolicy_,
+        *taskExecutor_,
+        motionControllers,
+        deviceManager,
+        this);
+
+    connectWorkflowSignals(mainPage, logPage);
+    connectWindowActions(navigation, pageStack);
+    connectMainPageActions(mainPage, logPage, deviceManager);
+    navigation->selectPage(0);
+}
+
+void MainWindow::connectDeviceSignals(
+    otms::device::DeviceManager& deviceManager,
+    MainPage* mainPage)
+{
     connect(&deviceManager, &otms::device::DeviceManager::laserConnectionChanged,
         this, [this, mainPage](bool connected, const QString&) {
             rightStatus_->setProbeConnectionState(connected);
@@ -193,19 +213,16 @@ MainWindow::MainWindow(QWidget* parent)
                 : std::numeric_limits<double>::quiet_NaN();
             topStatus_->setLaserMeasurementMillimeters(measurementMillimeters);
         });
+
     const bool laserConnected = deviceManager.isLaserConnected();
     rightStatus_->setProbeConnectionState(laserConnected);
     topStatus_->setLaserConnectionState(laserConnected);
     mainPage->setLaserConnectionState(laserConnected);
     taskExecutor_->setProbeReady(laserConnected);
+}
 
-    otms::device::MotionControllerManager& motionControllers =
-        otms::device::MotionControllerManager::instance();
-    measurementTaskController_ = new MeasurementTaskController(
-        *taskExecutor_,
-        motionControllers,
-        deviceManager,
-        this);
+void MainWindow::connectWorkflowSignals(MainPage* mainPage, LogPage* logPage)
+{
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
         rightStatus_, &RightStatusWidget::setMotionConnectionState);
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
@@ -225,6 +242,10 @@ MainWindow::MainWindow(QWidget* parent)
         rightStatus_, &RightStatusWidget::setLightCurtainState);
     connect(measurementTaskController_, &MeasurementTaskController::machineStateChanged,
         rightStatus_, &RightStatusWidget::setMachineState);
+    connect(measurementTaskController_, &MeasurementTaskController::runModeChanged,
+        rightStatus_, &RightStatusWidget::setRunMode);
+    connect(measurementTaskController_, &MeasurementTaskController::operationProfileChanged,
+        topStatus_, &TopStatusWidget::setOperationProfile);
     connect(measurementTaskController_, &MeasurementTaskController::initializationStateChanged,
         this,
         [this](otms::workflow::InitializationState state, const QString& detail) {
@@ -268,33 +289,51 @@ MainWindow::MainWindow(QWidget* parent)
                 QStringLiteral("机器故障报警"),
                 detail);
         });
+
+    const auto updateTaskExecutionState = [this](const QString& detail) {
+        setTaskState(
+            taskExecutionStateName(taskExecutor_->phase(), taskExecutor_->lastResult()),
+            detail,
+            taskExecutionStyleClass(taskExecutor_->phase(), taskExecutor_->lastResult()));
+    };
+    connect(taskExecutor_, &TaskExecutor::phaseChanged, this,
+        [updateTaskExecutionState](TaskExecutor::ExecutionPhase, const QString& detail) {
+            updateTaskExecutionState(detail);
+        });
+    connect(taskExecutor_, &TaskExecutor::taskResultChanged, this,
+        [updateTaskExecutionState](TaskExecutor::TaskResult, const QString& detail) {
+            updateTaskExecutionState(detail);
+        });
+    connect(taskExecutor_, &TaskExecutor::executionRejected, this, [this](const QString& reason) {
+        qCWarning(mainWindowLog).noquote()
+            << QStringLiteral("执行器拒绝：%1").arg(reason);
+        setTaskState(QStringLiteral("无法执行"), reason, QStringLiteral("terminated"));
+        QMessageBox::warning(this, QStringLiteral("无法执行操作"), reason);
+    });
+
+    rightStatus_->setMachineState(measurementTaskController_->machineState());
+    rightStatus_->setRunMode(measurementTaskController_->runMode());
+    topStatus_->setOperationProfile(measurementTaskController_->operationProfile());
+    topStatus_->setInitializationState(
+        measurementTaskController_->initializationState());
+}
+
+void MainWindow::connectWindowActions(
+    NavigationWidget* navigation,
+    QStackedWidget* pageStack)
+{
+    connect(navigation, &NavigationWidget::pageSelected, this, [pageStack](int index) {
+        if (index < 0 || index >= pageStack->count()) {
+            return;
+        }
+        pageStack->setCurrentIndex(index);
+    });
     connect(rightStatus_, &RightStatusWidget::motionConnectionRequested,
         this, &MainWindow::showMotionConnectionDialog);
     connect(rightStatus_, &RightStatusWidget::laserConnectionRequested,
         this, &MainWindow::showLaserConnectionDialog);
     connect(rightStatus_, &RightStatusWidget::runModeChangeRequested,
         this, [this](otms::workflow::RunMode targetMode) {
-            const otms::workflow::MachineState machineState =
-                measurementTaskController_->machineState();
-            if (machineState == otms::workflow::MachineState::Running) {
-                qCWarning(mainWindowLog)
-                    << "Run mode change rejected: machine is running";
-                QMessageBox::warning(
-                    this,
-                    QStringLiteral("无法切换运行模式"),
-                    QStringLiteral("机器正在运行，请等待当前动作或任务结束。"));
-                return;
-            }
-            if (machineState == otms::workflow::MachineState::Fault) {
-                qCWarning(mainWindowLog)
-                    << "Run mode change rejected: machine is faulted";
-                QMessageBox::warning(
-                    this,
-                    QStringLiteral("无法切换运行模式"),
-                    QStringLiteral("机器处于故障状态，请先完成故障复位。"));
-                return;
-            }
-
             const QString targetModeName = runModeName(targetMode);
             if (QMessageBox::question(
                     this,
@@ -315,18 +354,39 @@ MainWindow::MainWindow(QWidget* parent)
                         : QStringLiteral("waiting"));
             }
         });
-    rightStatus_->setMachineState(
-        measurementTaskController_->machineState(),
-        measurementTaskController_->runMode());
-    topStatus_->setInitializationState(
-        measurementTaskController_->initializationState());
+    connect(topStatus_, &TopStatusWidget::operationProfileChangeRequested,
+        this, [this](otms::workflow::OperationProfile targetProfile) {
+            const bool enableDebugBypass =
+                targetProfile == otms::workflow::OperationProfile::DebugBypass;
+            if (enableDebugBypass
+                && QMessageBox::warning(
+                       this,
+                       QStringLiteral("启用调试旁路"),
+                       QStringLiteral(
+                           "确认启用调试旁路吗？\n\n"
+                           "启用后，机器状态、普通故障、设备就绪状态、门锁和光幕"
+                           "将不参与软件放行。状态仍会真实显示和记录。\n\n"
+                           "软件急停、任务重入保护和设备自身安全机制仍然有效。"),
+                       QMessageBox::Yes | QMessageBox::No,
+                       QMessageBox::No) != QMessageBox::Yes) {
+                return;
+            }
 
-    connect(navigation, &NavigationWidget::pageSelected, this, [pageStack](int index) {
-        if (index < 0 || index >= pageStack->count()) {
-            return;
-        }
-        pageStack->setCurrentIndex(index);
-    });
+            if (!measurementTaskController_->switchOperationProfile(targetProfile)) {
+                return;
+            }
+
+            setTaskState(
+                enableDebugBypass
+                    ? QStringLiteral("调试旁路已启用")
+                    : QStringLiteral("生产策略已恢复"),
+                enableDebugBypass
+                    ? QStringLiteral("普通状态、故障与软件安全联锁已退出操作放行判断。")
+                    : QStringLiteral("所有正常状态与安全联锁门禁已恢复。"),
+                enableDebugBypass
+                    ? QStringLiteral("terminated")
+                    : QStringLiteral("waiting"));
+        });
     connect(topStatus_, &TopStatusWidget::emergencyStopRequested, this, [this] {
         measurementTaskController_->emergencyStop();
         setTaskState(
@@ -371,7 +431,14 @@ MainWindow::MainWindow(QWidget* parent)
                     QStringLiteral("已发送%1命令。").arg(action),
                     QStringLiteral("waiting"));
             }
-    });
+        });
+}
+
+void MainWindow::connectMainPageActions(
+    MainPage* mainPage,
+    LogPage* logPage,
+    otms::device::DeviceManager& deviceManager)
+{
     connect(mainPage, &MainPage::taskStateChangeRequested, this, &MainWindow::setTaskState);
     connect(mainPage, &MainPage::automaticTaskPrepared,
         measurementTaskController_, &MeasurementTaskController::startAutomaticTask);
@@ -419,76 +486,59 @@ MainWindow::MainWindow(QWidget* parent)
             status.message,
             status.ok() ? QStringLiteral("waiting") : QStringLiteral("terminated"));
     });
-    const auto updateTaskExecutionState = [this](const QString& detail) {
-        setTaskState(
-            taskExecutionStateName(taskExecutor_->phase(), taskExecutor_->lastResult()),
-            detail,
-            taskExecutionStyleClass(taskExecutor_->phase(), taskExecutor_->lastResult()));
-    };
-    connect(taskExecutor_, &TaskExecutor::phaseChanged, this,
-        [updateTaskExecutionState](TaskExecutor::ExecutionPhase, const QString& detail) {
-            updateTaskExecutionState(detail);
+    connect(mainPage, &MainPage::stageAxisAbsoluteMoveRequested, this,
+        [this](MotorAxis axis, double target) {
+            if (measurementTaskController_->moveAxisAbsolute(logicalAxis(axis), target)) {
+                setTaskState(
+                    QStringLiteral("手动运动中"),
+                    QStringLiteral("电机 %1 正在绝对定位至 %2 mm。")
+                        .arg(motorAxisName(axis))
+                        .arg(target, 0, 'f', 3),
+                    QStringLiteral("ready"));
+            }
         });
-    connect(taskExecutor_, &TaskExecutor::taskResultChanged, this,
-        [updateTaskExecutionState](TaskExecutor::TaskResult, const QString& detail) {
-            updateTaskExecutionState(detail);
+    connect(mainPage, &MainPage::stageAxisRelativeMoveRequested, this,
+        [this](MotorAxis axis, double distance) {
+            if (measurementTaskController_->moveAxisRelative(logicalAxis(axis), distance)) {
+                setTaskState(
+                    QStringLiteral("手动运动中"),
+                    QStringLiteral("电机 %1 正在相对移动 %2 mm。")
+                        .arg(motorAxisName(axis))
+                        .arg(distance, 0, 'f', 3),
+                    QStringLiteral("ready"));
+            }
         });
-    connect(taskExecutor_, &TaskExecutor::executionRejected, this, [this](const QString& reason) {
-        qCWarning(mainWindowLog).noquote()
-            << QStringLiteral("执行器拒绝：%1").arg(reason);
-        setTaskState(QStringLiteral("无法执行"), reason, QStringLiteral("terminated"));
-        QMessageBox::warning(this, QStringLiteral("无法执行操作"), reason);
-    });
-    connect(mainPage, &MainPage::stageAxisAbsoluteMoveRequested, this, [this](MotorAxis axis, double target) {
-        if (measurementTaskController_->moveAxisAbsolute(logicalAxis(axis), target)) {
-            setTaskState(
-                QStringLiteral("手动运动中"),
-                QStringLiteral("电机 %1 正在绝对定位至 %2 mm。")
-                    .arg(motorAxisName(axis))
-                    .arg(target, 0, 'f', 3),
-                QStringLiteral("ready"));
-        }
-    });
-    connect(mainPage, &MainPage::stageAxisRelativeMoveRequested, this, [this](MotorAxis axis, double distance) {
-        if (measurementTaskController_->moveAxisRelative(logicalAxis(axis), distance)) {
-            setTaskState(
-                QStringLiteral("手动运动中"),
-                QStringLiteral("电机 %1 正在相对移动 %2 mm。")
-                    .arg(motorAxisName(axis))
-                    .arg(distance, 0, 'f', 3),
-                QStringLiteral("ready"));
-        }
-    });
-    connect(mainPage, &MainPage::stageAbsoluteMoveRequested, this, [this](double motorX, double motorY, double motorZ) {
-        if (measurementTaskController_->moveStageAbsolute(motorX, motorY, motorZ)) {
-            setTaskState(
-                QStringLiteral("手动运动中"),
-                QStringLiteral("载物台正在移动至 X=%1 mm，Y=%2 mm，Z=%3 mm。")
-                    .arg(motorX, 0, 'f', 3)
-                    .arg(motorY, 0, 'f', 3)
-                    .arg(motorZ, 0, 'f', 3),
-                QStringLiteral("ready"));
-        }
-    });
+    connect(mainPage, &MainPage::stageAbsoluteMoveRequested, this,
+        [this](double motorX, double motorY, double motorZ) {
+            if (measurementTaskController_->moveStageAbsolute(motorX, motorY, motorZ)) {
+                setTaskState(
+                    QStringLiteral("手动运动中"),
+                    QStringLiteral("载物台正在移动至 X=%1 mm，Y=%2 mm，Z=%3 mm。")
+                        .arg(motorX, 0, 'f', 3)
+                        .arg(motorY, 0, 'f', 3)
+                        .arg(motorZ, 0, 'f', 3),
+                    QStringLiteral("ready"));
+            }
+        });
     connect(mainPage, &MainPage::currentPositionExportRequested, this, [this] {
         showPrototypeNotice(QStringLiteral("导出当前电机绝对坐标与物料相对坐标"));
     });
-    connect(mainPage, &MainPage::workpiecePointMoveRequested, this, [this](double workpieceX, double workpieceY, double motorX, double motorY) {
-        if (measurementTaskController_->moveWorkpiecePoint(motorX, motorY)) {
-            setTaskState(
-                QStringLiteral("手动运动中"),
-                QStringLiteral("物料测点 (%1, %2) 正在移动至电机坐标 (%3, %4) mm。")
-                    .arg(workpieceX, 0, 'f', 3)
-                    .arg(workpieceY, 0, 'f', 3)
-                    .arg(motorX, 0, 'f', 3)
-                    .arg(motorY, 0, 'f', 3),
-                QStringLiteral("ready"));
-        }
-    });
+    connect(mainPage, &MainPage::workpiecePointMoveRequested, this,
+        [this](double workpieceX, double workpieceY, double motorX, double motorY) {
+            if (measurementTaskController_->moveWorkpiecePoint(motorX, motorY)) {
+                setTaskState(
+                    QStringLiteral("手动运动中"),
+                    QStringLiteral("物料测点 (%1, %2) 正在移动至电机坐标 (%3, %4) mm。")
+                        .arg(workpieceX, 0, 'f', 3)
+                        .arg(workpieceY, 0, 'f', 3)
+                        .arg(motorX, 0, 'f', 3)
+                        .arg(motorY, 0, 'f', 3),
+                    QStringLiteral("ready"));
+            }
+        });
     connect(logPage, &LogPage::exportRequested, this, [this] {
         showPrototypeNotice(QStringLiteral("导出选中完成记录"));
     });
-    navigation->selectPage(0);
 }
 
 void MainWindow::showMotionConnectionDialog()

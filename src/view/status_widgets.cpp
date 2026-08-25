@@ -94,6 +94,20 @@ TopStatusWidget::TopStatusWidget(QWidget* parent)
         &TopStatusWidget::initializationRequested);
     layout->addWidget(initializationButton_);
 
+    debugBypassButton_ = new QPushButton(QStringLiteral("调试关闭"));
+    debugBypassButton_->setProperty("debugBypass", false);
+    debugBypassButton_->setMinimumSize(96, 72);
+    debugBypassButton_->setToolTip(
+        QStringLiteral("切换调试旁路策略；软件急停与执行完整性保护始终有效"));
+    connect(debugBypassButton_, &QPushButton::clicked, this, [this] {
+        const otms::workflow::OperationProfile targetProfile =
+            currentOperationProfile_ == otms::workflow::OperationProfile::Production
+            ? otms::workflow::OperationProfile::DebugBypass
+            : otms::workflow::OperationProfile::Production;
+        emit operationProfileChangeRequested(targetProfile);
+    });
+    layout->addWidget(debugBypassButton_);
+
     QPushButton* unlockDoor = WidgetFactory::createPrimaryButton(QStringLiteral("开锁"));
     unlockDoor->setMinimumSize(72, 72);
     unlockDoor->setToolTip(QStringLiteral("发送门锁解锁命令"));
@@ -249,6 +263,21 @@ void TopStatusWidget::setInitializationState(
         initializationButton_->setToolTip(QStringLiteral("初始化失败；点击可重试"));
         break;
     }
+}
+
+void TopStatusWidget::setOperationProfile(otms::workflow::OperationProfile profile)
+{
+    currentOperationProfile_ = profile;
+    const bool debugBypass = profile == otms::workflow::OperationProfile::DebugBypass;
+    debugBypassButton_->setText(
+        debugBypass ? QStringLiteral("调试旁路") : QStringLiteral("调试关闭"));
+    debugBypassButton_->setProperty("debugBypass", debugBypass);
+    debugBypassButton_->setToolTip(
+        debugBypass
+            ? QStringLiteral("调试旁路已启用：普通状态、故障与软件安全联锁不参与放行")
+            : QStringLiteral("切换调试旁路策略；软件急停与执行完整性保护始终有效"));
+    debugBypassButton_->style()->unpolish(debugBypassButton_);
+    debugBypassButton_->style()->polish(debugBypassButton_);
 }
 
 NavigationWidget::NavigationWidget(QWidget* parent)
@@ -452,11 +481,8 @@ void RightStatusWidget::setLightCurtainState(bool available, bool clear)
             : clear ? QStringLiteral("ready") : QStringLiteral("terminated"));
 }
 
-void RightStatusWidget::setMachineState(
-    otms::workflow::MachineState state,
-    otms::workflow::RunMode mode)
+void RightStatusWidget::setMachineState(otms::workflow::MachineState state)
 {
-    currentRunMode_ = mode;
     QString stateText;
     QString stateStyle;
     switch (state) {
@@ -478,6 +504,11 @@ void RightStatusWidget::setMachineState(
         break;
     }
     updateStatusBadge(machineState_, stateText, stateStyle);
+}
+
+void RightStatusWidget::setRunMode(otms::workflow::RunMode mode)
+{
+    currentRunMode_ = mode;
     updateStatusBadge(
         runMode_,
         mode == otms::workflow::RunMode::Manual

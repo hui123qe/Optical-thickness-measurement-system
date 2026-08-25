@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../workflow/machine_state.h"
+#include "../workflow/workflow_policy.h"
 
 #include <QStatusBar>
 #include <QWidget>
@@ -28,9 +29,11 @@ public slots:
     void setLaserMeasurementState(bool measuring);
     void setLaserMeasurementMillimeters(double measurementMillimeters);
     void setInitializationState(otms::workflow::InitializationState state);
+    void setOperationProfile(otms::workflow::OperationProfile profile);
 
 signals:
     void initializationRequested();
+    void operationProfileChangeRequested(otms::workflow::OperationProfile profile);
     void emergencyStopRequested();
     void resetRequested();
     void doorLockCommandRequested(bool locked);
@@ -45,6 +48,9 @@ private:
     QLabel* motorZPosition_{};
     QLabel* laserMeasurement_{};
     QPushButton* initializationButton_{};
+    QPushButton* debugBypassButton_{};
+    otms::workflow::OperationProfile currentOperationProfile_{
+        otms::workflow::OperationProfile::Production};
     bool motionConnected_{};
     bool laserConnected_{};
 };
@@ -74,9 +80,8 @@ public:
     void setProbeConnectionState(bool connected);
     void setDoorLockState(bool available, bool locked);
     void setLightCurtainState(bool available, bool clear);
-    void setMachineState(
-        otms::workflow::MachineState state,
-        otms::workflow::RunMode mode);
+    void setMachineState(otms::workflow::MachineState state);
+    void setRunMode(otms::workflow::RunMode mode);
 
 signals:
     void motionConnectionRequested();

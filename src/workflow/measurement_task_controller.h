@@ -4,6 +4,7 @@
 #include "../motor/motion_controller_manager.h"
 #include "machine_state.h"
 #include "task_executor.h"
+#include "workflow_policy.h"
 
 #include <QElapsedTimer>
 #include <QObject>
@@ -20,6 +21,7 @@ class MeasurementTaskController final : public QObject
 
 public:
     explicit MeasurementTaskController(
+        otms::workflow::WorkflowPolicy& workflowPolicy,
         TaskExecutor& executor,
         otms::device::MotionControllerManager& motionControllers,
         otms::device::DeviceManager& devices,
@@ -28,6 +30,7 @@ public:
     [[nodiscard]] otms::workflow::MachineState machineState() const;
     [[nodiscard]] otms::workflow::RunMode runMode() const;
     [[nodiscard]] otms::workflow::InitializationState initializationState() const;
+    [[nodiscard]] otms::workflow::OperationProfile operationProfile() const;
     [[nodiscard]] QStringList motionControllerIds() const;
     [[nodiscard]] bool isMotionControllerConnected(const QString& controllerId) const;
     [[nodiscard]] bool isLaserConnected() const;
@@ -38,6 +41,7 @@ public:
     bool connectLaser();
     bool disconnectLaser();
     bool switchRunMode(otms::workflow::RunMode mode);
+    bool switchOperationProfile(otms::workflow::OperationProfile profile);
     bool initializeMachine();
     bool homeAxis(otms::device::LogicalAxis axis);
     bool homeStage();
@@ -65,9 +69,9 @@ signals:
     void measurementAvailable(double measurementMillimeters);
     void doorLockStateChanged(bool available, bool locked);
     void lightCurtainStateChanged(bool available, bool clear);
-    void machineStateChanged(
-        otms::workflow::MachineState state,
-        otms::workflow::RunMode mode);
+    void machineStateChanged(otms::workflow::MachineState state);
+    void runModeChanged(otms::workflow::RunMode mode);
+    void operationProfileChanged(otms::workflow::OperationProfile profile);
     void initializationStateChanged(
         otms::workflow::InitializationState state,
         const QString& detail);
@@ -107,19 +111,19 @@ private slots:
 private:
     void initializeDatabase();
     void pollSafetyIo();
-    void pollStandaloneMotion();
-    [[nodiscard]] bool manualOperationAllowed();
-    [[nodiscard]] bool manualAxisEnableOperationAllowed();
-    [[nodiscard]] bool initializationAllowed();
+    void pollInitializationMotion();
+    [[nodiscard]] otms::workflow::WorkflowStateSnapshot workflowStateSnapshot() const;
+    [[nodiscard]] bool operationAllowed(otms::workflow::OperationKind operation);
     [[nodiscard]] bool safetyConditionsMet() const;
     [[nodiscard]] bool startupConditionsMet() const;
-    [[nodiscard]] bool runningConditionsMet() const;
     [[nodiscard]] QString startupConditionFailureReason() const;
     [[nodiscard]] QString safetyConditionFailureReason() const;
     void updateStateFromConditions();
     void finishRunning();
+    void handleTaskFailure(const QString& reason);
     void failInitialization(const QString& reason);
     void enterMachineFault(const QString& reason);
+    void reportOperationFailure(const QString& detail);
     void rejectOperation(const QString& detail);
     void setMachineState(otms::workflow::MachineState state);
     void setRunMode(otms::workflow::RunMode mode);
@@ -129,6 +133,7 @@ private:
     void abortAllAxes();
     void reportInitializationError(const QString& detail);
 
+    otms::workflow::WorkflowPolicy& workflowPolicy_;
     TaskExecutor& executor_;
     otms::device::MotionControllerManager& motionControllers_;
     otms::device::DeviceManager& devices_;
@@ -162,5 +167,5 @@ private:
     otms::workflow::RunMode runMode_{otms::workflow::RunMode::Manual};
     otms::workflow::InitializationState initializationState_{
         otms::workflow::InitializationState::NotStarted};
-    unsigned int standaloneMotionAxisMask_{};
+    unsigned int initializationMotionAxisMask_{};
 };

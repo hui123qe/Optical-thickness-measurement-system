@@ -61,6 +61,8 @@ qt_add_executable(OpticalThicknessUi
     src/workflow/measurement_task_controller.cpp
     src/workflow/measurement_task_controller.h
     src/workflow/machine_state.h
+    src/workflow/workflow_policy.cpp
+    src/workflow/workflow_policy.h
     src/data/measurement_database.cpp
     src/data/measurement_database.h
     src/motor/motion_controller.h

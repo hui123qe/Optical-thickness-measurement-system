@@ -17,8 +17,11 @@ QString logRunId(const QString& runId)
 
 } // namespace
 
-TaskExecutor::TaskExecutor(QObject* parent)
+TaskExecutor::TaskExecutor(
+    const otms::workflow::WorkflowPolicy& workflowPolicy,
+    QObject* parent)
     : QObject(parent)
+    , workflowPolicy_(workflowPolicy)
 {
 }
 
@@ -60,8 +63,13 @@ void TaskExecutor::setMotionDeviceReady(bool ready)
 
     motionDeviceReady_ = ready;
     emit readinessChanged(motionDeviceReady_, probeReady_);
-    if (!motionDeviceReady_ && isTaskInProgress()) {
+    if (!motionDeviceReady_
+        && isTaskInProgress()
+        && workflowPolicy_.enforcesStateGuards()) {
         enterFault(QStringLiteral("运动设备连接断开。"));
+    } else if (!motionDeviceReady_ && isTaskInProgress()) {
+        qCWarning(taskExecutorLog)
+            << "Debug bypass ignored motion device readiness loss";
     }
 }
 
@@ -73,8 +81,13 @@ void TaskExecutor::setProbeReady(bool ready)
 
     probeReady_ = ready;
     emit readinessChanged(motionDeviceReady_, probeReady_);
-    if (!probeReady_ && isTaskInProgress()) {
+    if (!probeReady_
+        && isTaskInProgress()
+        && workflowPolicy_.enforcesStateGuards()) {
         enterFault(QStringLiteral("激光探头连接断开。"));
+    } else if (!probeReady_ && isTaskInProgress()) {
+        qCWarning(taskExecutorLog)
+            << "Debug bypass ignored laser probe readiness loss";
     }
 }
 
@@ -87,10 +100,17 @@ void TaskExecutor::start(const QString& taskType, const QList<TaskExecutionPoint
                .arg(static_cast<int>(phase_))
                .arg(motionDeviceReady_)
                .arg(probeReady_);
-    if (phase_ != ExecutionPhase::Idle) {
+    const bool recoverableDebugFault = phase_ == ExecutionPhase::Faulted
+        && !workflowPolicy_.enforcesStateGuards();
+    if (phase_ != ExecutionPhase::Idle && !recoverableDebugFault) {
         qCWarning(taskExecutorLog) << "Start rejected: executor is not idle";
         emit executionRejected(QStringLiteral("执行器当前不是空闲状态。"));
         return;
+    }
+    if (recoverableDebugFault) {
+        qCWarning(taskExecutorLog)
+            << "Debug bypass cleared the inactive executor fault before start";
+        setPhase(ExecutionPhase::Idle, QStringLiteral("调试旁路已忽略执行器故障锁存。"));
     }
     if (points.isEmpty()) {
         qCWarning(taskExecutorLog) << "Start rejected: empty point queue";
@@ -102,8 +122,11 @@ void TaskExecutor::start(const QString& taskType, const QList<TaskExecutionPoint
         emit executionRejected(QStringLiteral("任务点数量超过执行器支持范围。"));
         return;
     }
-    if (!motionDeviceReady_ || !probeReady_) {
+    if ((!motionDeviceReady_ || !probeReady_)
+        && workflowPolicy_.enforcesStateGuards()) {
         QStringList unavailableDevices;
+
+
         if (!motionDeviceReady_) {
             unavailableDevices.append(QStringLiteral("运动设备"));
         }
@@ -117,6 +140,11 @@ void TaskExecutor::start(const QString& taskType, const QList<TaskExecutionPoint
             QStringLiteral("无法开始任务：%1未就绪。")
                 .arg(unavailableDevices.join(QStringLiteral("、"))));
         return;
+    }
+    if (!motionDeviceReady_ || !probeReady_) {
+        qCWarning(taskExecutorLog)
+            << "Debug bypass ignored device readiness"
+            << "motion" << motionDeviceReady_ << "probe" << probeReady_;
     }
 
     ++executionId_;

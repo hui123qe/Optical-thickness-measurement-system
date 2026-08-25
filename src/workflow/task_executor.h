@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workflow_policy.h"
+
 #include <QDateTime>
 #include <QList>
 #include <QMetaType>
@@ -46,7 +48,9 @@ public:
     };
     Q_ENUM(TaskResult)
 
-    explicit TaskExecutor(QObject* parent = nullptr);
+    explicit TaskExecutor(
+        const otms::workflow::WorkflowPolicy& workflowPolicy,
+        QObject* parent = nullptr);
 
     [[nodiscard]] ExecutionPhase phase() const;
     [[nodiscard]] TaskResult lastResult() const;
@@ -131,6 +135,7 @@ private:
     void setPhase(ExecutionPhase phase, const QString& detail);
     void setLastResult(TaskResult result, const QString& detail);
 
+    const otms::workflow::WorkflowPolicy& workflowPolicy_;
     ExecutionPhase phase_{ExecutionPhase::Idle};
     TaskResult lastResult_{TaskResult::None};
     TaskResult pendingStopResult_{TaskResult::None};
