@@ -4,7 +4,7 @@
       {
         "id": "stage",
         "type": "Agc301",
-        "ipAddress": "192.168.0.10"
+        "ipAddress": "172.1.1.101"
       }
     ],
     "axes": [
@@ -12,19 +12,19 @@
         "id": "x",
         "controller": "stage",
         "controllerAxis": 0,
-        "countsPerUnit": 1000.0
+        "countsPerUnit": 20000.0
       },
       {
         "id": "y",
         "controller": "stage",
         "controllerAxis": 1,
-        "countsPerUnit": 1000.0
+        "countsPerUnit": 20000.0
       },
       {
         "id": "z",
         "controller": "stage",
         "controllerAxis": 2,
-        "countsPerUnit": 1000.0
+        "countsPerUnit": 20000.0
       }
     ],
     "digitalInputs": [
