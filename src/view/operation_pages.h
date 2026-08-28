@@ -9,6 +9,8 @@
 #include <QTransform>
 #include <QWidget>
 
+#include <optional>
+
 class QComboBox;
 class QDoubleSpinBox;
 class QGroupBox;
@@ -32,6 +34,9 @@ class MainPage final : public QWidget
 
 public:
     explicit MainPage(QWidget* parent = nullptr);
+    [[nodiscard]] std::optional<QPointF> workpiecePositionForMotor(
+        double motorX,
+        double motorY) const;
 
 public slots:
     void setLaserConnectionState(bool connected);
@@ -76,6 +81,8 @@ private:
     QList<WorkpieceTaskPoint> automaticWorkpiecePointQueue_;
     QList<TaskExecutionPoint> automaticTaskPointQueue_;
     QTransform workpieceToMotorTransform_;
+    QTransform motorToWorkpieceTransform_;
+    bool coordinateTransformAvailable_{};
     QPushButton* startLaserMeasurement_{};
     QPushButton* stopLaserMeasurement_{};
     QLabel* laserMeasurementState_{};

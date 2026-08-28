@@ -166,11 +166,13 @@ QFrame* TopStatusWidget::createWorkpiecePositionCard()
     QVBoxLayout* cardLayout = qobject_cast<QVBoxLayout*>(card->layout());
     QHBoxLayout* valuesLayout = new QHBoxLayout;
     valuesLayout->setSpacing(6);
+    workpieceXPosition_ = createValueLabel();
+    workpieceYPosition_ = createValueLabel();
     addMeasurementRow(
-        *valuesLayout, QStringLiteral("xw"), QStringLiteral("mm"), createValueLabel());
+        *valuesLayout, QStringLiteral("xw"), QStringLiteral("mm"), workpieceXPosition_);
     valuesLayout->addSpacing(8);
     addMeasurementRow(
-        *valuesLayout, QStringLiteral("yw"), QStringLiteral("mm"), createValueLabel());
+        *valuesLayout, QStringLiteral("yw"), QStringLiteral("mm"), workpieceYPosition_);
     cardLayout->addLayout(valuesLayout);
     return card;
 }
@@ -210,6 +212,8 @@ void TopStatusWidget::setMotionConnectionState(bool connected)
         motorXPosition_->setText(QStringLiteral("--"));
         motorYPosition_->setText(QStringLiteral("--"));
         motorZPosition_->setText(QStringLiteral("--"));
+        workpieceXPosition_->setText(QStringLiteral("--"));
+        workpieceYPosition_->setText(QStringLiteral("--"));
     }
 }
 
@@ -231,6 +235,22 @@ void TopStatusWidget::setMotorPositionMillimeters(
     motorXPosition_->setText(QString::number(xMillimeters, 'f', 3));
     motorYPosition_->setText(QString::number(yMillimeters, 'f', 3));
     motorZPosition_->setText(QString::number(zMillimeters, 'f', 3));
+}
+
+void TopStatusWidget::setWorkpiecePositionMillimeters(
+    double xMillimeters,
+    double yMillimeters)
+{
+    if (!motionConnected_
+        || !std::isfinite(xMillimeters)
+        || !std::isfinite(yMillimeters)) {
+        workpieceXPosition_->setText(QStringLiteral("--"));
+        workpieceYPosition_->setText(QStringLiteral("--"));
+        return;
+    }
+
+    workpieceXPosition_->setText(QString::number(xMillimeters, 'f', 3));
+    workpieceYPosition_->setText(QString::number(yMillimeters, 'f', 3));
 }
 
 void TopStatusWidget::setLaserConnectionState(bool connected)

@@ -213,12 +213,25 @@ QTabWidget* MainPage::createOperationTabs()
 void MainPage::applyCoordinateTransform(int index)
 {
     if (index < 0 || index >= coordinateTransforms_.size()) {
+        coordinateTransformAvailable_ = false;
         return;
     }
 
     workpieceToMotorTransform_ = coordinateTransforms_.at(index);
+    motorToWorkpieceTransform_ = workpieceToMotorTransform_.inverted(
+        &coordinateTransformAvailable_);
     transformParameters_->setText(coordinateTransformDescriptions_.at(index));
     updateAutomaticMotorPointQueue();
+}
+
+std::optional<QPointF> MainPage::workpiecePositionForMotor(
+    double motorX,
+    double motorY) const
+{
+    if (!coordinateTransformAvailable_) {
+        return std::nullopt;
+    }
+    return motorToWorkpieceTransform_.map(QPointF(motorX, motorY));
 }
 
 void MainPage::forwardWorkpiecePointMove(double workpieceX, double workpieceY)

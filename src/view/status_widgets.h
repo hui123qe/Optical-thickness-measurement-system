@@ -25,6 +25,9 @@ public slots:
         double xMillimeters,
         double yMillimeters,
         double zMillimeters);
+    void setWorkpiecePositionMillimeters(
+        double xMillimeters,
+        double yMillimeters);
     void setLaserConnectionState(bool connected);
     void setLaserMeasurementState(bool measuring);
     void setLaserMeasurementMillimeters(double measurementMillimeters);
@@ -46,6 +49,8 @@ private:
     QLabel* motorXPosition_{};
     QLabel* motorYPosition_{};
     QLabel* motorZPosition_{};
+    QLabel* workpieceXPosition_{};
+    QLabel* workpieceYPosition_{};
     QLabel* laserMeasurement_{};
     QPushButton* initializationButton_{};
     QPushButton* debugBypassButton_{};

@@ -11,6 +11,7 @@
 #include "view/status_widgets.h"
 
 #include <limits>
+#include <optional>
 
 #include <QHBoxLayout>
 #include <QDialog>
@@ -228,7 +229,15 @@ void MainWindow::connectWorkflowSignals(MainPage* mainPage, LogPage* logPage)
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
         topStatus_, &TopStatusWidget::setMotionConnectionState);
     connect(measurementTaskController_, &MeasurementTaskController::motorPositionChanged,
-        topStatus_, &TopStatusWidget::setMotorPositionMillimeters);
+        this, [this, mainPage](double motorX, double motorY, double motorZ) {
+            topStatus_->setMotorPositionMillimeters(motorX, motorY, motorZ);
+            const std::optional<QPointF> workpiecePosition =
+                mainPage->workpiecePositionForMotor(motorX, motorY);
+            const double unavailable = std::numeric_limits<double>::quiet_NaN();
+            topStatus_->setWorkpiecePositionMillimeters(
+                workpiecePosition.has_value() ? workpiecePosition->x() : unavailable,
+                workpiecePosition.has_value() ? workpiecePosition->y() : unavailable);
+        });
     connect(measurementTaskController_, &MeasurementTaskController::axisEnableStateChanged,
         mainPage,
         [mainPage](otms::device::LogicalAxis axis, bool available, bool enabled) {

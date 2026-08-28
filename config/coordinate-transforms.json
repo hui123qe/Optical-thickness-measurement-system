@@ -12,6 +12,12 @@
             "rotationDegrees": 90.0,
             "translationX": 120.0,
             "translationY": 260.0
+        },
+        {
+            "name": "虚拟方案 C（小偏移）",
+            "rotationDegrees": 0.0,
+            "translationX": 1.0,
+            "translationY": 1.0
         }
     ]
 }
