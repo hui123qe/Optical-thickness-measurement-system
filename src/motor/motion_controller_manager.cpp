@@ -337,17 +337,18 @@ bool MotionControllerManager::initialize(QString* errorMessage)
         << "controllers" << config.controllers.size()
         << "axes" << config.axes.size();
 
-    if (!g_useVirtualMotionDriver) {
-        return true;
-    }
-
     for (const ControllerConfig& controller : config.controllers) {
         if (connectController(controller.id) != 1) {
-            setError(errorMessage, QStringLiteral("Cannot connect virtual controller: %1").arg(controller.id));
+            setError(errorMessage, QStringLiteral("Cannot connect motion controller: %1").arg(controller.id));
             shutdown();
             return false;
         }
     }
+
+    if (!g_useVirtualMotionDriver) {
+        return true;
+    }
+
     for (const AxisConfig& axis : config.axes) {
         if (enableAxis(axis.logicalAxis) != 1) {
             setError(errorMessage, QStringLiteral("Cannot enable virtual axis"));
