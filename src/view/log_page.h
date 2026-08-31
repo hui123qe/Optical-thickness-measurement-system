@@ -20,9 +20,7 @@ public:
 
 public slots:
     void refresh();
-
-signals:
-    void exportRequested();
+    void exportSelectedRecord();
 
 private:
     MeasurementDatabase database_;

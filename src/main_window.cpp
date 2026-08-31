@@ -10,9 +10,14 @@
 #include "view/operation_pages.h"
 #include "view/status_widgets.h"
 
+#include <cmath>
 #include <limits>
 #include <optional>
 
+#include <QDateTime>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -21,8 +26,14 @@
 #include <QLoggingCategory>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSaveFile>
+#include <QSettings>
 #include <QStackedWidget>
+#include <QStandardPaths>
 #include <QString>
+#include <QStringConverter>
+#include <QStringList>
+#include <QTextStream>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -187,7 +198,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     connectWorkflowSignals(mainPage, logPage);
     connectWindowActions(navigation, pageStack);
-    connectMainPageActions(mainPage, logPage, deviceManager);
+    connectMainPageActions(mainPage, deviceManager);
     navigation->selectPage(0);
 }
 
@@ -201,11 +212,20 @@ void MainWindow::connectDeviceSignals(
             topStatus_->setLaserConnectionState(connected);
             mainPage->setLaserConnectionState(connected);
             taskExecutor_->setProbeReady(connected);
+            if (!connected) {
+                latestThicknessMillimeters_.reset();
+            }
         });
     connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementStateChanged,
         mainPage, &MainPage::setLaserMeasurementState);
     connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementStateChanged,
         topStatus_, &TopStatusWidget::setLaserMeasurementState);
+    connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementStateChanged,
+        this, [this](bool measuring) {
+            if (!measuring) {
+                latestThicknessMillimeters_.reset();
+            }
+        });
     connect(&deviceManager, &otms::device::DeviceManager::laserMeasurementUpdated,
         this, [this](const otms::device::LaserMeasurement& measurement) {
             const double measurementMillimeters =
@@ -213,6 +233,11 @@ void MainWindow::connectDeviceSignals(
                 ? measurement.valueMicrometers / 1000.0
                 : std::numeric_limits<double>::quiet_NaN();
             topStatus_->setLaserMeasurementMillimeters(measurementMillimeters);
+            if (std::isfinite(measurementMillimeters)) {
+                latestThicknessMillimeters_ = measurementMillimeters;
+            } else {
+                latestThicknessMillimeters_.reset();
+            }
         });
 
     const bool laserConnected = deviceManager.isLaserConnected();
@@ -228,15 +253,29 @@ void MainWindow::connectWorkflowSignals(MainPage* mainPage, LogPage* logPage)
         rightStatus_, &RightStatusWidget::setMotionConnectionState);
     connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
         topStatus_, &TopStatusWidget::setMotionConnectionState);
+    connect(measurementTaskController_, &MeasurementTaskController::motionConnectionChanged,
+        this, [this](bool connected) {
+            if (!connected) {
+                latestMotorPositionMillimeters_.reset();
+                latestWorkpiecePositionMillimeters_.reset();
+            }
+        });
     connect(measurementTaskController_, &MeasurementTaskController::motorPositionChanged,
         this, [this, mainPage](double motorX, double motorY, double motorZ) {
             topStatus_->setMotorPositionMillimeters(motorX, motorY, motorZ);
+            latestMotorPositionMillimeters_ = {motorX, motorY, motorZ};
             const std::optional<QPointF> workpiecePosition =
                 mainPage->workpiecePositionForMotor(motorX, motorY);
             const double unavailable = std::numeric_limits<double>::quiet_NaN();
             topStatus_->setWorkpiecePositionMillimeters(
                 workpiecePosition.has_value() ? workpiecePosition->x() : unavailable,
                 workpiecePosition.has_value() ? workpiecePosition->y() : unavailable);
+            if (workpiecePosition.has_value()) {
+                latestWorkpiecePositionMillimeters_ = {
+                    workpiecePosition->x(), workpiecePosition->y()};
+            } else {
+                latestWorkpiecePositionMillimeters_.reset();
+            }
         });
     connect(measurementTaskController_, &MeasurementTaskController::axisEnableStateChanged,
         mainPage,
@@ -245,6 +284,10 @@ void MainWindow::connectWorkflowSignals(MainPage* mainPage, LogPage* logPage)
         });
     connect(measurementTaskController_, &MeasurementTaskController::measurementAvailable,
         topStatus_, &TopStatusWidget::setLaserMeasurementMillimeters);
+    connect(measurementTaskController_, &MeasurementTaskController::measurementAvailable,
+        this, [this](double thicknessMillimeters) {
+            latestThicknessMillimeters_ = thicknessMillimeters;
+        });
     connect(measurementTaskController_, &MeasurementTaskController::doorLockStateChanged,
         rightStatus_, &RightStatusWidget::setDoorLockState);
     connect(measurementTaskController_, &MeasurementTaskController::lightCurtainStateChanged,
@@ -411,7 +454,6 @@ void MainWindow::connectWindowActions(
 
 void MainWindow::connectMainPageActions(
     MainPage* mainPage,
-    LogPage* logPage,
     otms::device::DeviceManager& deviceManager)
 {
     connect(mainPage, &MainPage::taskStateChangeRequested, this, &MainWindow::setTaskState);
@@ -496,7 +538,7 @@ void MainWindow::connectMainPageActions(
             }
         });
     connect(mainPage, &MainPage::currentPositionExportRequested, this, [this] {
-        showPrototypeNotice(QStringLiteral("导出当前电机绝对坐标与物料相对坐标"));
+        exportCurrentPosition();
     });
     connect(mainPage, &MainPage::workpiecePointMoveRequested, this,
         [this](double workpieceX, double workpieceY, double motorX, double motorY) {
@@ -511,9 +553,108 @@ void MainWindow::connectMainPageActions(
                     QStringLiteral("ready"));
             }
         });
-    connect(logPage, &LogPage::exportRequested, this, [this] {
-        showPrototypeNotice(QStringLiteral("导出选中完成记录"));
-    });
+}
+
+void MainWindow::exportCurrentPosition()
+{
+    QStringList unavailableValues;
+    if (!latestMotorPositionMillimeters_.has_value()) {
+        unavailableValues.append(QStringLiteral("电机位置"));
+    }
+    if (!latestWorkpiecePositionMillimeters_.has_value()) {
+        unavailableValues.append(QStringLiteral("物料位置"));
+    }
+    if (!latestThicknessMillimeters_.has_value()) {
+        unavailableValues.append(QStringLiteral("厚度"));
+    }
+    if (!unavailableValues.isEmpty()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法导出当前位置"),
+            QStringLiteral("以下实时数据当前不可用：%1。\n请确认设备连接、物料坐标系和激光测量状态。")
+                .arg(unavailableValues.join(QStringLiteral("、"))));
+        return;
+    }
+
+    const QDateTime exportedAt = QDateTime::currentDateTime();
+    const QString fileName = QStringLiteral("当前位置_%1.txt")
+                                 .arg(exportedAt.toString(QStringLiteral("yyyyMMdd_HHmmss_zzz")));
+    QSettings settings(
+        QSettings::IniFormat,
+        QSettings::UserScope,
+        QStringLiteral("OpticalThicknessMeasurementSystem"),
+        QStringLiteral("OpticalThicknessUi"));
+    const QString directorySettingKey =
+        QStringLiteral("export/currentPositionDirectory");
+    QString defaultDirectory = settings.value(directorySettingKey).toString();
+    if (defaultDirectory.isEmpty() || !QDir(defaultDirectory).exists()) {
+        defaultDirectory =
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+    if (defaultDirectory.isEmpty() || !QDir(defaultDirectory).exists()) {
+        defaultDirectory = QDir::homePath();
+    }
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("导出当前位置"),
+        QDir(defaultDirectory).filePath(fileName),
+        QStringLiteral("文本文件 (*.txt)"));
+    if (filePath.isEmpty()) {
+        return;
+    }
+    if (!filePath.endsWith(QStringLiteral(".txt"), Qt::CaseInsensitive)) {
+        filePath.append(QStringLiteral(".txt"));
+    }
+
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("导出失败"),
+            QStringLiteral("无法创建文件：%1").arg(file.errorString()));
+        return;
+    }
+
+    const std::array<double, 3>& motorPosition =
+        latestMotorPositionMillimeters_.value();
+    const std::array<double, 2>& workpiecePosition =
+        latestWorkpiecePositionMillimeters_.value();
+    QTextStream stream(&file);
+    stream.setEncoding(QStringConverter::Utf8);
+    stream << QStringLiteral("导出时间: %1\n")
+                  .arg(exportedAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss.zzz")));
+    stream << QStringLiteral("电机位置 (mm): X=%1, Y=%2, Z=%3\n")
+                  .arg(motorPosition[0], 0, 'f', 3)
+                  .arg(motorPosition[1], 0, 'f', 3)
+                  .arg(motorPosition[2], 0, 'f', 3);
+    stream << QStringLiteral("物料位置 (mm): xw=%1, yw=%2\n")
+                  .arg(workpiecePosition[0], 0, 'f', 3)
+                  .arg(workpiecePosition[1], 0, 'f', 3);
+    stream << QStringLiteral("厚度 (mm): %1\n")
+                  .arg(latestThicknessMillimeters_.value(), 0, 'f', 3);
+    stream.flush();
+
+    if (stream.status() != QTextStream::Ok || !file.commit()) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("导出失败"),
+            QStringLiteral("写入文件失败：%1").arg(file.errorString()));
+        return;
+    }
+
+    qCInfo(mainWindowLog).noquote()
+        << QStringLiteral("当前位置已导出：%1").arg(QDir::toNativeSeparators(filePath));
+    settings.setValue(directorySettingKey, QFileInfo(filePath).absolutePath());
+    settings.sync();
+    const bool directoryRemembered = settings.status() == QSettings::NoError;
+    QMessageBox::information(
+        this,
+        QStringLiteral("导出完成"),
+        directoryRemembered
+            ? QStringLiteral("当前位置已导出至：\n%1")
+                  .arg(QDir::toNativeSeparators(filePath))
+            : QStringLiteral("当前位置已导出至：\n%1\n\n但无法记录本次保存目录。")
+                  .arg(QDir::toNativeSeparators(filePath)));
 }
 
 void MainWindow::showMotionConnectionDialog()

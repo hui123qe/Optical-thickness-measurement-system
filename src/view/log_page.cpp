@@ -2,17 +2,28 @@
 
 #include "widget_factory.h"
 
+#include <xlsxdocument.h>
+#include <xlsxformat.h>
+
 #include <QAbstractItemView>
 #include <QDateTime>
 #include <QDateTimeEdit>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QSettings>
+#include <QStandardPaths>
+#include <QStringList>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
+#include <QVariant>
 #include <QVBoxLayout>
 
 LogPage::LogPage(QWidget* parent)
@@ -89,7 +100,7 @@ LogPage::LogPage(QWidget* parent)
             && logTable_->item(row, 2)->text() == QStringLiteral("完成");
         exportButton_->setEnabled(completed);
     });
-    connect(exportButton_, &QPushButton::clicked, this, &LogPage::exportRequested);
+    connect(exportButton_, &QPushButton::clicked, this, &LogPage::exportSelectedRecord);
     QTimer::singleShot(0, this, &LogPage::refresh);
 }
 
@@ -131,4 +142,157 @@ void LogPage::refresh()
         logTable_->setItem(row, 3, new QTableWidgetItem(record.detail));
     }
     queryStatus_->setText(QStringLiteral("共 %1 条").arg(records.size()));
+}
+
+void LogPage::exportSelectedRecord()
+{
+    const int row = logTable_->currentRow();
+    QTableWidgetItem* taskTypeItem = row >= 0 ? logTable_->item(row, 0) : nullptr;
+    QTableWidgetItem* resultItem = row >= 0 ? logTable_->item(row, 2) : nullptr;
+    if (taskTypeItem == nullptr || resultItem == nullptr
+        || resultItem->text() != QStringLiteral("完成")) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法导出记录"),
+            QStringLiteral("请选择一条结果为“完成”的任务记录。"));
+        return;
+    }
+
+    const QString runId = taskTypeItem->data(Qt::UserRole + 1).toString();
+    QString errorMessage;
+    const QList<MeasurementRecord> measurements =
+        database_.queryMeasurements(runId, &errorMessage);
+    if (!errorMessage.isEmpty()) {
+        QMessageBox::critical(this, QStringLiteral("导出失败"), errorMessage);
+        return;
+    }
+    if (measurements.isEmpty()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("无法导出记录"),
+            QStringLiteral("选中任务没有可导出的测量数据。"));
+        return;
+    }
+
+    const QDateTime exportedAt = QDateTime::currentDateTime();
+    const QString fileName = QStringLiteral("测量记录_%1.xlsx")
+                                 .arg(exportedAt.toString(QStringLiteral("yyyyMMdd_HHmmss_zzz")));
+    QSettings settings(
+        QSettings::IniFormat,
+        QSettings::UserScope,
+        QStringLiteral("OpticalThicknessMeasurementSystem"),
+        QStringLiteral("OpticalThicknessUi"));
+    const QString directorySettingKey =
+        QStringLiteral("export/measurementRecordDirectory");
+    QString defaultDirectory = settings.value(directorySettingKey).toString();
+    if (defaultDirectory.isEmpty() || !QDir(defaultDirectory).exists()) {
+        defaultDirectory =
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+    if (defaultDirectory.isEmpty() || !QDir(defaultDirectory).exists()) {
+        defaultDirectory = QDir::homePath();
+    }
+    QString filePath = QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("导出测量记录"),
+        QDir(defaultDirectory).filePath(fileName),
+        QStringLiteral("Excel 工作簿 (*.xlsx)"));
+    if (filePath.isEmpty()) {
+        return;
+    }
+    if (!filePath.endsWith(QStringLiteral(".xlsx"), Qt::CaseInsensitive)) {
+        filePath.append(QStringLiteral(".xlsx"));
+    }
+
+    QXlsx::Document workbook;
+    bool workbookReady = workbook.addSheet(QStringLiteral("测量数据"));
+
+    QXlsx::Format headerFormat;
+    headerFormat.setFontBold(true);
+    headerFormat.setHorizontalAlignment(QXlsx::Format::AlignHCenter);
+    headerFormat.setVerticalAlignment(QXlsx::Format::AlignVCenter);
+
+    QXlsx::Format numberFormat;
+    numberFormat.setNumberFormat(QStringLiteral("0.000"));
+
+    QXlsx::Format dateTimeFormat;
+    dateTimeFormat.setNumberFormat(QStringLiteral("yyyy-mm-dd hh:mm:ss.000"));
+
+    const QStringList headers{
+        QStringLiteral("点序号"),
+        QStringLiteral("点位说明"),
+        QStringLiteral("电机X(mm)"),
+        QStringLiteral("电机Y(mm)"),
+        QStringLiteral("物料xw(mm)"),
+        QStringLiteral("物料yw(mm)"),
+        QStringLiteral("厚度(um)"),
+        QStringLiteral("测量时间")};
+    for (int column = 0; column < headers.size(); ++column) {
+        workbookReady = workbook.write(1, column + 1, headers.at(column), headerFormat)
+            && workbookReady;
+    }
+
+    int worksheetRow = 2;
+    for (const MeasurementRecord& measurement : measurements) {
+        workbookReady = workbook.write(worksheetRow, 1, measurement.pointIndex)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow, 2, measurement.pointDescription)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow, 3, measurement.motorPosition.x(), numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow, 4, measurement.motorPosition.y(), numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow, 5, measurement.workpiecePosition.x(), numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow, 6, measurement.workpiecePosition.y(), numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow, 7, measurement.thicknessMicrometers, numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow,
+                            8,
+                            QVariant::fromValue(measurement.measuredAt),
+                            dateTimeFormat)
+            && workbookReady;
+        ++worksheetRow;
+    }
+
+    workbookReady = workbook.setRowHeight(1, 22.0) && workbookReady;
+    workbookReady = workbook.setColumnWidth(1, 10.0) && workbookReady;
+    workbookReady = workbook.setColumnWidth(2, 20.0) && workbookReady;
+    workbookReady = workbook.setColumnWidth(3, 7, 15.0) && workbookReady;
+    workbookReady = workbook.setColumnWidth(8, 24.0) && workbookReady;
+    if (!workbookReady) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("导出失败"),
+            QStringLiteral("无法生成 Excel 工作簿内容。"));
+        return;
+    }
+
+    if (!workbook.saveAs(filePath)) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("导出失败"),
+            QStringLiteral("无法写入 Excel 文件，请检查保存目录和文件占用状态。"));
+        return;
+    }
+
+    settings.setValue(directorySettingKey, QFileInfo(filePath).absolutePath());
+    settings.sync();
+    const bool directoryRemembered = settings.status() == QSettings::NoError;
+    QMessageBox::information(
+        this,
+        QStringLiteral("导出完成"),
+        directoryRemembered
+            ? QStringLiteral("测量记录已导出至：\n%1")
+                  .arg(QDir::toNativeSeparators(filePath))
+            : QStringLiteral("测量记录已导出至：\n%1\n\n但无法记录本次保存目录。")
+                  .arg(QDir::toNativeSeparators(filePath)));
 }

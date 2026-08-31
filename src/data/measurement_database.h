@@ -16,6 +16,16 @@ struct TaskLogRecord
     QString detail;
 };
 
+struct MeasurementRecord
+{
+    int pointIndex{};
+    QString pointDescription;
+    QPointF motorPosition;
+    QPointF workpiecePosition;
+    double thicknessMicrometers{};
+    QDateTime measuredAt;
+};
+
 class MeasurementDatabase final
 {
 public:
@@ -50,6 +60,9 @@ public:
         const QDateTime& rangeStart,
         const QDateTime& rangeEnd,
         const QString& keyword,
+        QString* errorMessage = nullptr);
+    QList<MeasurementRecord> queryMeasurements(
+        const QString& runId,
         QString* errorMessage = nullptr);
 
     [[nodiscard]] static QString defaultFilePath();

@@ -434,7 +434,7 @@ QGroupBox* ManualControlWidget::createPositionExportGroup()
 {
     QGroupBox* exportGroup = new QGroupBox(QStringLiteral("当前位置导出"));
     QHBoxLayout* exportLayout = new QHBoxLayout(exportGroup);
-    QLabel* exportHint = new QLabel(QStringLiteral("导出当前电机绝对坐标 X/Y/Z 与物料相对坐标 xw/yw 快照。"));
+    QLabel* exportHint = new QLabel(QStringLiteral("导出当前电机位置、物料位置与厚度快照。"));
     exportHint->setProperty("role", "muted");
     QPushButton* exportButton = new QPushButton(QStringLiteral("导出当前位置"));
     exportLayout->addWidget(exportHint);

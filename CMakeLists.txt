@@ -12,6 +12,8 @@ qt_standard_project_setup()
 
 set(CMAKE_AUTORCC ON)
 
+add_subdirectory(third-party/qxlsx/QXlsx EXCLUDE_FROM_ALL)
+
 if(NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "The packaged AGTIO and CL-3000 SDKs support MSVC x64 only.")
 endif()
@@ -98,7 +100,14 @@ qt_add_executable(OpticalThicknessUi
     resources/ui_resources.qrc
 )
 
-target_link_libraries(OpticalThicknessUi PRIVATE Qt6::Widgets Qt6::Sql Agtio::Motion Keyence::CL3000)
+target_link_libraries(OpticalThicknessUi
+    PRIVATE
+        Qt6::Widgets
+        Qt6::Sql
+        QXlsx::QXlsx
+        Agtio::Motion
+        Keyence::CL3000
+)
 
 if(MSVC)
     target_compile_options(OpticalThicknessUi PRIVATE /utf-8)

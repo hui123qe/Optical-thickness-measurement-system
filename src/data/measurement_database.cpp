@@ -232,6 +232,46 @@ QList<TaskLogRecord> MeasurementDatabase::queryTaskLogs(
     return records;
 }
 
+QList<MeasurementRecord> MeasurementDatabase::queryMeasurements(
+    const QString& runId,
+    QString* errorMessage)
+{
+    QList<MeasurementRecord> records;
+    if (!open(errorMessage)) {
+        return records;
+    }
+
+    QString tableName;
+    if (!resolveExperimentTableName(runId, tableName, errorMessage)) {
+        return records;
+    }
+
+    QSqlQuery query(database_);
+    const QString sql = QStringLiteral(
+        "SELECT point_index, point_description, motor_x, motor_y, workpiece_x, workpiece_y, "
+        "thickness_micrometers, measured_at_utc_ms "
+        "FROM %1 ORDER BY point_index ASC")
+                            .arg(tableName);
+    if (!query.exec(sql)) {
+        setError(
+            errorMessage,
+            QStringLiteral("查询实验测量记录失败：%1").arg(query.lastError().text()));
+        return records;
+    }
+
+    while (query.next()) {
+        records.append(MeasurementRecord{
+            query.value(0).toInt(),
+            query.value(1).toString(),
+            QPointF(query.value(2).toDouble(), query.value(3).toDouble()),
+            QPointF(query.value(4).toDouble(), query.value(5).toDouble()),
+            query.value(6).toDouble(),
+            QDateTime::fromMSecsSinceEpoch(query.value(7).toLongLong(), Qt::UTC)
+                .toLocalTime()});
+    }
+    return records;
+}
+
 QString MeasurementDatabase::defaultFilePath()
 {
     return QDir(QCoreApplication::applicationDirPath())

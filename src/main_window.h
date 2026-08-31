@@ -2,6 +2,9 @@
 
 #include "workflow/workflow_policy.h"
 
+#include <array>
+#include <optional>
+
 #include <QMainWindow>
 
 class RightStatusWidget;
@@ -31,9 +34,9 @@ private:
     void connectWindowActions(NavigationWidget* navigation, QStackedWidget* pageStack);
     void connectMainPageActions(
         MainPage* mainPage,
-        LogPage* logPage,
         otms::device::DeviceManager& deviceManager);
     void setTaskState(const QString& state, const QString& detail, const QString& styleClass);
+    void exportCurrentPosition();
     void showPrototypeNotice(const QString& action);
     void showMotionConnectionDialog();
     void showLaserConnectionDialog();
@@ -43,4 +46,7 @@ private:
     RightStatusWidget* rightStatus_{};
     TaskExecutor* taskExecutor_{};
     MeasurementTaskController* measurementTaskController_{};
+    std::optional<std::array<double, 3>> latestMotorPositionMillimeters_;
+    std::optional<std::array<double, 2>> latestWorkpiecePositionMillimeters_;
+    std::optional<double> latestThicknessMillimeters_;
 };
