@@ -49,26 +49,14 @@ OperationDecision WorkflowPolicy::evaluate(
         return rejected(QStringLiteral("软件急停已锁存，请先完成故障复位。"));
     }
 
-    if (operation == OperationKind::Initialization
-        && state.initializationState == InitializationState::Running) {
-        return rejected(QStringLiteral("机器正在初始化，请勿重复执行。"));
-    }
-    if (operation == OperationKind::AutomaticTask
-        && state.initializationState == InitializationState::Running) {
-        return rejected(QStringLiteral("机器正在初始化，无法启动自动任务。"));
-    }
-
     if ((operation == OperationKind::ManualMotion
-            || operation == OperationKind::ManualAxisEnable
-            || operation == OperationKind::Initialization)
+            || operation == OperationKind::ManualAxisEnable)
         && state.automaticTaskInProgress) {
         switch (operation) {
         case OperationKind::ManualMotion:
             return rejected(QStringLiteral("自动任务正在运行，无法执行手动运动。"));
         case OperationKind::ManualAxisEnable:
             return rejected(QStringLiteral("自动任务正在运行，无法改变轴使能状态。"));
-        case OperationKind::Initialization:
-            return rejected(QStringLiteral("自动任务正在运行，无法执行初始化。"));
         case OperationKind::AutomaticTask:
             break;
         }
@@ -78,9 +66,6 @@ OperationDecision WorkflowPolicy::evaluate(
     QStringList bypassedConditions;
     switch (operation) {
     case OperationKind::ManualMotion:
-        if (state.initializationState == InitializationState::Running) {
-            return rejected(QStringLiteral("机器正在初始化，无法执行手动运动。"));
-        }
         if (state.runMode != RunMode::Manual) {
             rejectionReason = QStringLiteral("当前为自动模式，请先切换到手动模式。");
             bypassedConditions.append(QStringLiteral("当前为自动模式"));
@@ -99,31 +84,10 @@ OperationDecision WorkflowPolicy::evaluate(
             state.safetyFailureReason);
         break;
     case OperationKind::ManualAxisEnable:
-        if (state.initializationState == InitializationState::Running) {
-            return rejected(QStringLiteral("机器正在初始化，无法改变轴使能状态。"));
-        }
         if (state.runMode != RunMode::Manual) {
             rejectionReason = QStringLiteral("当前为自动模式，请先切换到手动模式。");
             bypassedConditions.append(QStringLiteral("当前为自动模式"));
         }
-        appendBypassedCondition(
-            bypassedConditions,
-            state.machineState == MachineState::Fault,
-            QStringLiteral("机器处于故障状态"));
-        appendBypassedCondition(
-            bypassedConditions,
-            !state.motionConnected,
-            QStringLiteral("运动控制器未连接"));
-        appendBypassedCondition(
-            bypassedConditions,
-            !state.safetyConditionsMet,
-            state.safetyFailureReason);
-        break;
-    case OperationKind::Initialization:
-        appendBypassedCondition(
-            bypassedConditions,
-            state.machineState == MachineState::Running,
-            QStringLiteral("机器正在运行"));
         appendBypassedCondition(
             bypassedConditions,
             state.machineState == MachineState::Fault,
@@ -178,17 +142,6 @@ OperationDecision WorkflowPolicy::evaluate(
         }
         if (!state.motionConnected) {
             return rejected(QStringLiteral("运动控制器未连接，无法改变轴使能状态。"));
-        }
-        return rejected(state.safetyFailureReason);
-    case OperationKind::Initialization:
-        if (state.machineState == MachineState::Running) {
-            return rejected(QStringLiteral("机器正在运行，无法执行初始化。"));
-        }
-        if (state.machineState == MachineState::Fault) {
-            return rejected(QStringLiteral("机器处于故障状态，请先完成故障复位。"));
-        }
-        if (!state.motionConnected) {
-            return rejected(QStringLiteral("运动控制器未连接，无法执行初始化。"));
         }
         return rejected(state.safetyFailureReason);
     case OperationKind::AutomaticTask:

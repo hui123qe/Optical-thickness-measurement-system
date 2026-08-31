@@ -84,16 +84,6 @@ TopStatusWidget::TopStatusWidget(QWidget* parent)
     layout->addWidget(systemName);
     layout->addStretch();
 
-    initializationButton_ = WidgetFactory::createPrimaryButton(QStringLiteral("初始化"));
-    initializationButton_->setMinimumSize(88, 72);
-    initializationButton_->setToolTip(QStringLiteral("执行全轴使能和 XYZ 回零"));
-    connect(
-        initializationButton_,
-        &QPushButton::clicked,
-        this,
-        &TopStatusWidget::initializationRequested);
-    layout->addWidget(initializationButton_);
-
     debugBypassButton_ = new QPushButton(QStringLiteral("调试关闭"));
     debugBypassButton_->setProperty("debugBypass", false);
     debugBypassButton_->setMinimumSize(96, 72);
@@ -258,30 +248,6 @@ void TopStatusWidget::setLaserConnectionState(bool connected)
     laserConnected_ = connected;
     if (!laserConnected_) {
         laserMeasurement_->setText(QStringLiteral("--"));
-    }
-}
-
-void TopStatusWidget::setInitializationState(
-    otms::workflow::InitializationState state)
-{
-    const bool running = state == otms::workflow::InitializationState::Running;
-    initializationButton_->setEnabled(!running);
-    initializationButton_->setText(
-        running ? QStringLiteral("初始化中") : QStringLiteral("初始化"));
-
-    switch (state) {
-    case otms::workflow::InitializationState::NotStarted:
-        initializationButton_->setToolTip(QStringLiteral("执行全轴使能和 XYZ 回零"));
-        break;
-    case otms::workflow::InitializationState::Running:
-        initializationButton_->setToolTip(QStringLiteral("正在执行全轴使能和 XYZ 回零"));
-        break;
-    case otms::workflow::InitializationState::Completed:
-        initializationButton_->setToolTip(QStringLiteral("初始化已完成；点击可重新初始化"));
-        break;
-    case otms::workflow::InitializationState::Failed:
-        initializationButton_->setToolTip(QStringLiteral("初始化失败；点击可重试"));
-        break;
     }
 }
 

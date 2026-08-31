@@ -345,17 +345,6 @@ bool MotionControllerManager::initialize(QString* errorMessage)
         }
     }
 
-    if (!g_useVirtualMotionDriver) {
-        return true;
-    }
-
-    for (const AxisConfig& axis : config.axes) {
-        if (enableAxis(axis.logicalAxis) != 1) {
-            setError(errorMessage, QStringLiteral("Cannot enable virtual axis"));
-            shutdown();
-            return false;
-        }
-    }
     return true;
 }
 

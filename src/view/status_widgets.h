@@ -31,11 +31,9 @@ public slots:
     void setLaserConnectionState(bool connected);
     void setLaserMeasurementState(bool measuring);
     void setLaserMeasurementMillimeters(double measurementMillimeters);
-    void setInitializationState(otms::workflow::InitializationState state);
     void setOperationProfile(otms::workflow::OperationProfile profile);
 
 signals:
-    void initializationRequested();
     void operationProfileChangeRequested(otms::workflow::OperationProfile profile);
     void emergencyStopRequested();
     void resetRequested();
@@ -52,7 +50,6 @@ private:
     QLabel* workpieceXPosition_{};
     QLabel* workpieceYPosition_{};
     QLabel* laserMeasurement_{};
-    QPushButton* initializationButton_{};
     QPushButton* debugBypassButton_{};
     otms::workflow::OperationProfile currentOperationProfile_{
         otms::workflow::OperationProfile::Production};

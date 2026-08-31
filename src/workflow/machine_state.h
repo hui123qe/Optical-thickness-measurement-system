@@ -16,12 +16,4 @@ enum class RunMode
     Automatic
 };
 
-enum class InitializationState
-{
-    NotStarted,
-    Running,
-    Completed,
-    Failed
-};
-
 } // namespace otms::workflow

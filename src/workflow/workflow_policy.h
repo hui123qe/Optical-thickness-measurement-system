@@ -17,7 +17,6 @@ enum class OperationKind
 {
     ManualMotion,
     ManualAxisEnable,
-    Initialization,
     AutomaticTask
 };
 
@@ -25,7 +24,6 @@ struct WorkflowStateSnapshot
 {
     MachineState machineState{MachineState::NotReady};
     RunMode runMode{RunMode::Manual};
-    InitializationState initializationState{InitializationState::NotStarted};
     bool automaticTaskInProgress{};
     bool motionConnected{};
     bool safetyConditionsMet{};

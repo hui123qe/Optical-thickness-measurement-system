@@ -29,7 +29,6 @@ public:
 
     [[nodiscard]] otms::workflow::MachineState machineState() const;
     [[nodiscard]] otms::workflow::RunMode runMode() const;
-    [[nodiscard]] otms::workflow::InitializationState initializationState() const;
     [[nodiscard]] otms::workflow::OperationProfile operationProfile() const;
     [[nodiscard]] QStringList motionControllerIds() const;
     [[nodiscard]] bool isMotionControllerConnected(const QString& controllerId) const;
@@ -42,7 +41,6 @@ public:
     bool disconnectLaser();
     bool switchRunMode(otms::workflow::RunMode mode);
     bool switchOperationProfile(otms::workflow::OperationProfile profile);
-    bool initializeMachine();
     bool homeAxis(otms::device::LogicalAxis axis);
     bool homeStage();
     bool setAxisEnabled(otms::device::LogicalAxis axis, bool enabled);
@@ -72,9 +70,6 @@ signals:
     void machineStateChanged(otms::workflow::MachineState state);
     void runModeChanged(otms::workflow::RunMode mode);
     void operationProfileChanged(otms::workflow::OperationProfile profile);
-    void initializationStateChanged(
-        otms::workflow::InitializationState state,
-        const QString& detail);
     void taskLogChanged();
     void operationRejected(const QString& detail);
     void machineFaultOccurred(const QString& detail);
@@ -111,25 +106,22 @@ private slots:
 private:
     void initializeDatabase();
     void pollSafetyIo();
-    void pollInitializationMotion();
     [[nodiscard]] otms::workflow::WorkflowStateSnapshot workflowStateSnapshot() const;
     [[nodiscard]] bool operationAllowed(otms::workflow::OperationKind operation);
+    [[nodiscard]] bool enableAutomaticTaskAxes();
     [[nodiscard]] bool safetyConditionsMet() const;
     [[nodiscard]] bool startupConditionsMet() const;
-    [[nodiscard]] QString startupConditionFailureReason() const;
+    [[nodiscard]] bool runningConditionsMet() const;
+    [[nodiscard]] QString runningConditionFailureReason() const;
     [[nodiscard]] QString safetyConditionFailureReason() const;
     void updateStateFromConditions();
     void finishRunning();
     void handleTaskFailure(const QString& reason);
-    void failInitialization(const QString& reason);
     void enterMachineFault(const QString& reason);
     void reportOperationFailure(const QString& detail);
     void rejectOperation(const QString& detail);
     void setMachineState(otms::workflow::MachineState state);
     void setRunMode(otms::workflow::RunMode mode);
-    void setInitializationState(
-        otms::workflow::InitializationState state,
-        const QString& detail);
     void abortAllAxes();
     void reportInitializationError(const QString& detail);
 
@@ -165,7 +157,4 @@ private:
     bool lightCurtainClear_{};
     otms::workflow::MachineState machineState_{otms::workflow::MachineState::NotReady};
     otms::workflow::RunMode runMode_{otms::workflow::RunMode::Manual};
-    otms::workflow::InitializationState initializationState_{
-        otms::workflow::InitializationState::NotStarted};
-    unsigned int initializationMotionAxisMask_{};
 };

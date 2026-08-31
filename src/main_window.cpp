@@ -255,27 +255,6 @@ void MainWindow::connectWorkflowSignals(MainPage* mainPage, LogPage* logPage)
         rightStatus_, &RightStatusWidget::setRunMode);
     connect(measurementTaskController_, &MeasurementTaskController::operationProfileChanged,
         topStatus_, &TopStatusWidget::setOperationProfile);
-    connect(measurementTaskController_, &MeasurementTaskController::initializationStateChanged,
-        this,
-        [this](otms::workflow::InitializationState state, const QString& detail) {
-            topStatus_->setInitializationState(state);
-            if (state == otms::workflow::InitializationState::Running) {
-                setTaskState(
-                    QStringLiteral("初始化中"),
-                    detail,
-                    QStringLiteral("waiting"));
-            } else if (state == otms::workflow::InitializationState::Completed) {
-                setTaskState(
-                    QStringLiteral("初始化完成"),
-                    detail,
-                    QStringLiteral("ready"));
-            } else if (state == otms::workflow::InitializationState::Failed) {
-                setTaskState(
-                    QStringLiteral("初始化失败"),
-                    detail,
-                    QStringLiteral("terminated"));
-            }
-        });
     connect(measurementTaskController_, &MeasurementTaskController::taskLogChanged,
         logPage, &LogPage::refresh);
     connect(measurementTaskController_, &MeasurementTaskController::errorOccurred,
@@ -323,8 +302,6 @@ void MainWindow::connectWorkflowSignals(MainPage* mainPage, LogPage* logPage)
     rightStatus_->setMachineState(measurementTaskController_->machineState());
     rightStatus_->setRunMode(measurementTaskController_->runMode());
     topStatus_->setOperationProfile(measurementTaskController_->operationProfile());
-    topStatus_->setInitializationState(
-        measurementTaskController_->initializationState());
 }
 
 void MainWindow::connectWindowActions(
@@ -410,17 +387,6 @@ void MainWindow::connectWindowActions(
                 QStringLiteral("已清除软件故障锁存并重新评估启动条件。"),
                 QStringLiteral("waiting"));
         }
-    });
-    connect(topStatus_, &TopStatusWidget::initializationRequested, this, [this] {
-        if (QMessageBox::question(
-                this,
-                QStringLiteral("设备初始化确认"),
-                QStringLiteral("确认执行设备初始化吗？\n\n将依次执行全轴使能和 XYZ 回零。"),
-                QMessageBox::Yes | QMessageBox::No,
-                QMessageBox::No) != QMessageBox::Yes) {
-            return;
-        }
-        measurementTaskController_->initializeMachine();
     });
     connect(topStatus_, &TopStatusWidget::doorLockCommandRequested,
         this, [this](bool locked) {
