@@ -1,0 +1,9 @@
+# IDE
+/.vs/
+/.vscode/
+
+# CMake build output
+/out/
+
+# Third-party dependencies
+/third-party/
