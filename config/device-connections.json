@@ -24,7 +24,12 @@
         "id": "z",
         "controller": "stage",
         "controllerAxis": 2,
-        "countsPerUnit": 20000.0
+        "countsPerUnit": 20000.0,
+        "softLimit": {
+          "enabled": true,
+          "min": 0.0,
+          "max": 50.0
+        }
       }
     ],
     "digitalInputs": [

@@ -114,6 +114,8 @@ private:
     [[nodiscard]] bool runningConditionsMet() const;
     [[nodiscard]] QString runningConditionFailureReason() const;
     [[nodiscard]] QString safetyConditionFailureReason() const;
+    [[nodiscard]] bool zAxisTargetAllowed(double targetPosition) const;
+    [[nodiscard]] QString zAxisSoftLimitDetail(double position, const QString& action) const;
     void updateStateFromConditions();
     void finishRunning();
     void handleTaskFailure(const QString& reason);

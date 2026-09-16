@@ -352,6 +352,10 @@ bool MeasurementTaskController::moveAxisAbsolute(
     if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
+    if (axis == otms::device::LogicalAxis::Z && !zAxisTargetAllowed(position)) {
+        rejectOperation(zAxisSoftLimitDetail(position, QStringLiteral("目标位置超出软限位")));
+        return false;
+    }
     if (motionControllers_.moveAbsolute(axis, position, true) != 1) {
         reportOperationFailure(QStringLiteral("手动绝对定位命令失败。"));
         return false;
@@ -367,6 +371,19 @@ bool MeasurementTaskController::moveAxisRelative(
     if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
         return false;
     }
+    if (axis == otms::device::LogicalAxis::Z) {
+        double currentPosition = 0.0;
+        if (motionControllers_.getPosition(axis, currentPosition) != 1) {
+            reportOperationFailure(QStringLiteral("无法读取 Z 轴当前位置，未执行相对移动。"));
+            return false;
+        }
+
+        const double targetPosition = currentPosition + distance;
+        if (!zAxisTargetAllowed(targetPosition)) {
+            rejectOperation(zAxisSoftLimitDetail(targetPosition, QStringLiteral("相对移动目标超出软限位")));
+            return false;
+        }
+    }
     if (motionControllers_.moveRelative(axis, distance, true) != 1) {
         reportOperationFailure(QStringLiteral("手动相对移动命令失败。"));
         return false;
@@ -381,6 +398,10 @@ bool MeasurementTaskController::moveStageAbsolute(
     double zPosition)
 {
     if (!operationAllowed(otms::workflow::OperationKind::ManualMotion)) {
+        return false;
+    }
+    if (!zAxisTargetAllowed(zPosition)) {
+        rejectOperation(zAxisSoftLimitDetail(zPosition, QStringLiteral("联动目标 Z 超出软限位")));
         return false;
     }
 
@@ -578,6 +599,12 @@ void MeasurementTaskController::pollMotorStatus()
     }
     if (positionAvailable) {
         emit motorPositionChanged(xPosition, yPosition, zPosition);
+        if (!zAxisTargetAllowed(zPosition)) {
+            enterMachineFault(zAxisSoftLimitDetail(
+                zPosition,
+                QStringLiteral("运行中位置超出软限位，已触发软件急停")));
+            return;
+        }
     }
 
     pollSafetyIo();
@@ -677,6 +704,32 @@ QString MeasurementTaskController::safetyConditionFailureReason() const
         ? QStringLiteral("安全条件不满足。")
         : QStringLiteral("%1，无法执行操作。")
               .arg(failures.join(QStringLiteral("、")));
+}
+
+bool MeasurementTaskController::zAxisTargetAllowed(double targetPosition) const
+{
+    return motionControllers_.isAxisTargetWithinSoftLimit(
+        otms::device::LogicalAxis::Z,
+        targetPosition);
+}
+
+QString MeasurementTaskController::zAxisSoftLimitDetail(
+    double position,
+    const QString& action) const
+{
+    double minimum = 0.0;
+    double maximum = 0.0;
+    if (!motionControllers_.axisSoftLimit(otms::device::LogicalAxis::Z, minimum, maximum)) {
+        return QStringLiteral("%1：Z=%2 mm。")
+            .arg(action)
+            .arg(position, 0, 'f', 3);
+    }
+
+    return QStringLiteral("%1：Z=%2 mm，允许范围 [%3, %4] mm。")
+        .arg(action)
+        .arg(position, 0, 'f', 3)
+        .arg(minimum, 0, 'f', 3)
+        .arg(maximum, 0, 'f', 3);
 }
 
 void MeasurementTaskController::updateStateFromConditions()

@@ -75,6 +75,13 @@ public:
     int getReferencePosition(LogicalAxis logicalAxis, double& position) const;
     int getVelocity(LogicalAxis logicalAxis, double& unitsPerSecond) const;
     int getMotionStatus(LogicalAxis logicalAxis, int& status) const;
+    [[nodiscard]] bool axisSoftLimit(
+        LogicalAxis logicalAxis,
+        double& minimum,
+        double& maximum) const;
+    [[nodiscard]] bool isAxisTargetWithinSoftLimit(
+        LogicalAxis logicalAxis,
+        double position) const;
 
     int stopAxis(
         LogicalAxis logicalAxis,
@@ -120,6 +127,9 @@ private:
         QString controllerId;
         int controllerAxis{};
         double countsPerUnit{1.0};
+        bool softLimitEnabled{};
+        double softLimitMinimum{};
+        double softLimitMaximum{};
     };
 
     struct IoMapping
@@ -137,6 +147,7 @@ private:
     int readDigitalInput(const QString& logicalInput, bool& value) const;
     int readDigitalOutput(const QString& logicalOutput, bool& value) const;
     int writeDigitalOutput(const QString& logicalOutput, bool value);
+    static bool withinSoftLimit(const AxisMapping& mapping, double position);
     static bool toCounts(double value, double countsPerUnit, int& counts);
     static double fromCounts(int counts, double countsPerUnit);
 

@@ -36,6 +36,9 @@ struct AxisConfig
     QString controllerId;
     int controllerAxis{};
     double countsPerUnit{1.0};
+    bool softLimitEnabled{};
+    double softLimitMinimum{};
+    double softLimitMaximum{};
 };
 
 struct IoConfig
@@ -227,12 +230,55 @@ bool loadMotionConfiguration(MotionConfiguration& config, QString* errorMessage)
         const QString controllerId = object.value(QStringLiteral("controller")).toString().trimmed();
         const int controllerAxis = object.value(QStringLiteral("controllerAxis")).toInt(-1);
         const double countsPerUnit = object.value(QStringLiteral("countsPerUnit")).toDouble(0.0);
+        bool softLimitEnabled = false;
+        double softLimitMinimum = 0.0;
+        double softLimitMaximum = 0.0;
+        const QJsonValue softLimitValue = object.value(QStringLiteral("softLimit"));
+        if (!softLimitValue.isUndefined()) {
+            if (!softLimitValue.isObject()) {
+                setError(errorMessage, QStringLiteral("motion.axes softLimit must be an object"));
+                return false;
+            }
+
+            const QJsonObject softLimit = softLimitValue.toObject();
+            const QJsonValue enabledValue = softLimit.value(QStringLiteral("enabled"));
+            if (!enabledValue.isUndefined() && !enabledValue.isBool()) {
+                setError(errorMessage, QStringLiteral("motion.axes softLimit.enabled must be a boolean"));
+                return false;
+            }
+
+            softLimitEnabled = enabledValue.toBool(true);
+            if (softLimitEnabled) {
+                const QJsonValue minimumValue = softLimit.value(QStringLiteral("min"));
+                const QJsonValue maximumValue = softLimit.value(QStringLiteral("max"));
+                if (!minimumValue.isDouble() || !maximumValue.isDouble()) {
+                    setError(errorMessage, QStringLiteral("motion.axes softLimit min/max must be numbers"));
+                    return false;
+                }
+
+                softLimitMinimum = minimumValue.toDouble();
+                softLimitMaximum = maximumValue.toDouble();
+                if (!std::isfinite(softLimitMinimum)
+                    || !std::isfinite(softLimitMaximum)
+                    || softLimitMinimum > softLimitMaximum) {
+                    setError(errorMessage, QStringLiteral("motion.axes softLimit contains an invalid range"));
+                    return false;
+                }
+            }
+        }
         if (!logicalAxis || controllerId.isEmpty() || controllerAxis < 0
             || !std::isfinite(countsPerUnit) || countsPerUnit <= 0.0) {
             setError(errorMessage, QStringLiteral("motion.axes contains an invalid axis mapping"));
             return false;
         }
-        config.axes.push_back(AxisConfig{*logicalAxis, controllerId, controllerAxis, countsPerUnit});
+        config.axes.push_back(AxisConfig{
+            *logicalAxis,
+            controllerId,
+            controllerAxis,
+            countsPerUnit,
+            softLimitEnabled,
+            softLimitMinimum,
+            softLimitMaximum});
     }
 
     return readIoMappings(
@@ -303,7 +349,13 @@ bool MotionControllerManager::initialize(QString* errorMessage)
             }
             axisMappings_.emplace(
                 axis.logicalAxis,
-                AxisMapping{axis.controllerId, axis.controllerAxis, axis.countsPerUnit});
+                AxisMapping{
+                    axis.controllerId,
+                    axis.controllerAxis,
+                    axis.countsPerUnit,
+                    axis.softLimitEnabled,
+                    axis.softLimitMinimum,
+                    axis.softLimitMaximum});
         }
 
         const auto addIoMappings = [this](
@@ -536,6 +588,15 @@ int MotionControllerManager::moveAbsolute(
     if (!entry || !toCounts(position, mapping->countsPerUnit, counts)) {
         return 0;
     }
+    if (!withinSoftLimit(*mapping, position)) {
+        qCCritical(motionControllerManagerLog)
+            << "Axis absolute target exceeds software limit"
+            << static_cast<int>(logicalAxis)
+            << position
+            << mapping->softLimitMinimum
+            << mapping->softLimitMaximum;
+        return 0;
+    }
     std::scoped_lock commandLock(entry->commandMutex);
     return entry->controller->moveAbsolute(
         mapping->controllerAxis,
@@ -558,6 +619,26 @@ int MotionControllerManager::moveRelative(
         return 0;
     }
     std::scoped_lock commandLock(entry->commandMutex);
+    if (mapping->softLimitEnabled) {
+        int currentCounts = 0;
+        if (entry->controller->getPosition(mapping->controllerAxis, currentCounts) != 1) {
+            return 0;
+        }
+
+        const double currentPosition = fromCounts(currentCounts, mapping->countsPerUnit);
+        const double targetPosition = currentPosition + distance;
+        if (!withinSoftLimit(*mapping, targetPosition)) {
+            qCCritical(motionControllerManagerLog)
+                << "Axis relative target exceeds software limit"
+                << static_cast<int>(logicalAxis)
+                << "current" << currentPosition
+                << "distance" << distance
+                << "target" << targetPosition
+                << mapping->softLimitMinimum
+                << mapping->softLimitMaximum;
+            return 0;
+        }
+    }
     return entry->controller->moveRelative(
         mapping->controllerAxis,
         counts,
@@ -575,6 +656,15 @@ int MotionControllerManager::moveAbsoluteRepetitive(
     ControllerEntry* entry = mapping ? controllerFor(mapping->controllerId) : nullptr;
     int counts = 0;
     if (!entry || !toCounts(position, mapping->countsPerUnit, counts)) {
+        return 0;
+    }
+    if (!withinSoftLimit(*mapping, position)) {
+        qCCritical(motionControllerManagerLog)
+            << "Axis repetitive absolute target exceeds software limit"
+            << static_cast<int>(logicalAxis)
+            << position
+            << mapping->softLimitMinimum
+            << mapping->softLimitMaximum;
         return 0;
     }
     std::scoped_lock commandLock(entry->commandMutex);
@@ -646,6 +736,31 @@ int MotionControllerManager::getMotionStatus(LogicalAxis logicalAxis, int& statu
     }
     std::scoped_lock commandLock(entry->commandMutex);
     return entry->controller->getMotionStatus(mapping->controllerAxis, status);
+}
+
+bool MotionControllerManager::axisSoftLimit(
+    LogicalAxis logicalAxis,
+    double& minimum,
+    double& maximum) const
+{
+    std::shared_lock registryLock(registryMutex_);
+    const AxisMapping* mapping = axisMappingFor(logicalAxis);
+    if (!mapping || !mapping->softLimitEnabled) {
+        return false;
+    }
+
+    minimum = mapping->softLimitMinimum;
+    maximum = mapping->softLimitMaximum;
+    return true;
+}
+
+bool MotionControllerManager::isAxisTargetWithinSoftLimit(
+    LogicalAxis logicalAxis,
+    double position) const
+{
+    std::shared_lock registryLock(registryMutex_);
+    const AxisMapping* mapping = axisMappingFor(logicalAxis);
+    return mapping != nullptr && withinSoftLimit(*mapping, position);
 }
 
 int MotionControllerManager::stopAxis(
@@ -833,6 +948,14 @@ bool MotionControllerManager::cncLinearAbsoluteXT(
         || !toCounts(endVelocity, xMapping->countsPerUnit, endCounts)) {
         return false;
     }
+    if (!withinSoftLimit(*xMapping, xPosition)
+        || !withinSoftLimit(*tMapping, tPosition)) {
+        qCCritical(motionControllerManagerLog)
+            << "CNC XT target exceeds software limit"
+            << xPosition
+            << tPosition;
+        return false;
+    }
     std::scoped_lock commandLock(entry->commandMutex);
     return entry->controller->cncLinearAbsoluteXT(xCounts, tCounts, cruiseCounts, endCounts);
 }
@@ -862,8 +985,24 @@ bool MotionControllerManager::cncLinearAbsoluteXY(
         || !toCounts(endVelocity, xMapping->countsPerUnit, endCounts)) {
         return false;
     }
+    if (!withinSoftLimit(*xMapping, xPosition)
+        || !withinSoftLimit(*yMapping, yPosition)) {
+        qCCritical(motionControllerManagerLog)
+            << "CNC XY target exceeds software limit"
+            << xPosition
+            << yPosition;
+        return false;
+    }
     std::scoped_lock commandLock(entry->commandMutex);
     return entry->controller->cncLinearAbsoluteXY(xCounts, yCounts, cruiseCounts, endCounts);
+}
+
+bool MotionControllerManager::withinSoftLimit(const AxisMapping& mapping, double position)
+{
+    return !mapping.softLimitEnabled
+        || (std::isfinite(position)
+            && position >= mapping.softLimitMinimum
+            && position <= mapping.softLimitMaximum);
 }
 
 bool MotionControllerManager::toCounts(double value, double countsPerUnit, int& counts)
