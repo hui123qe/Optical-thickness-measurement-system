@@ -427,7 +427,7 @@ void LaserDebugPage::showMeasurement(const otms::device::LaserMeasurement& measu
             .arg(QString::number(measurement.displayUnitMillimeters, 'g', 12)));
     measuredValue_->setText(
         QStringLiteral("%1 mm")
-            .arg(QString::number(measurement.valueMillimeters, 'f', 6)));
+            .arg(QString::number(measurement.valueMillimeters, 'g', 4)));
     quality_->setText(qualityName(measurement.quality));
     judgment_->setText(judgmentName(measurement.judgment));
     triggerCount_->setText(QString::number(measurement.triggerCount));

@@ -5,6 +5,8 @@
 #include <xlsxdocument.h>
 #include <xlsxformat.h>
 
+#include <cmath>
+
 #include <QAbstractItemView>
 #include <QDateTime>
 #include <QDateTimeEdit>
@@ -25,6 +27,22 @@
 #include <QTimer>
 #include <QVariant>
 #include <QVBoxLayout>
+
+namespace {
+
+double roundToFourSignificantDigits(double value)
+{
+    if (!std::isfinite(value) || value == 0.0) {
+        return value;
+    }
+
+    constexpr int SignificantDigits = 4;
+    const double magnitude = std::floor(std::log10(std::abs(value)));
+    const double scale = std::pow(10.0, SignificantDigits - 1.0 - magnitude);
+    return std::round(value * scale) / scale;
+}
+
+} // namespace
 
 LogPage::LogPage(QWidget* parent)
     : QWidget(parent)
@@ -265,8 +283,8 @@ void LogPage::exportSelectedRecord()
         workbookReady = workbook.write(
                             worksheetRow,
                             9,
-                            measurement.thicknessMillimeters,
-                            numberFormat)
+                            roundToFourSignificantDigits(
+                                measurement.thicknessMillimeters))
             && workbookReady;
         workbookReady = workbook.write(
                             worksheetRow,

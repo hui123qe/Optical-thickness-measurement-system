@@ -646,7 +646,7 @@ void MainWindow::exportCurrentPosition()
                   .arg(workpiecePosition[0], 0, 'f', 3)
                   .arg(workpiecePosition[1], 0, 'f', 3);
     stream << QStringLiteral("厚度 (mm): %1\n")
-                  .arg(latestThicknessMillimeters_.value(), 0, 'f', 3);
+                  .arg(latestThicknessMillimeters_.value(), 0, 'g', 4);
     stream.flush();
 
     if (stream.status() != QTextStream::Ok || !file.commit()) {

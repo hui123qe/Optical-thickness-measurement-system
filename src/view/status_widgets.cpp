@@ -184,7 +184,7 @@ void TopStatusWidget::setLaserMeasurementMillimeters(double measurementMillimete
 {
     laserMeasurement_->setText(
         laserConnected_ && std::isfinite(measurementMillimeters)
-            ? QString::number(measurementMillimeters, 'f', 3)
+            ? QString::number(measurementMillimeters, 'g', 4)
             : QStringLiteral("--"));
 }
 
