@@ -13,7 +13,7 @@ namespace {
 
 constexpr int ArrivalPollIntervalMs = 20;
 constexpr int MotorStatusPollIntervalMs = 200;
-constexpr qint64 ArrivalTimeoutMs = 10000;
+constexpr qint64 ArrivalTimeoutMs = 50000;
 constexpr double ArrivalToleranceMillimeters = 0.001;
 constexpr int RequiredArrivalSamples = 2;
 
@@ -963,7 +963,7 @@ void MeasurementTaskController::pollArrival()
     const bool positionReached =
         std::abs(xPosition - activePoint_.motorTarget.x()) <= ArrivalToleranceMillimeters
         && std::abs(yPosition - activePoint_.motorTarget.y()) <= ArrivalToleranceMillimeters;
-    if (xStatus != 0 && yStatus != 0 && positionReached) {
+    if (xStatus == 0 && yStatus == 0 && positionReached) {
         ++consecutiveArrivalSamples_;
         if (consecutiveArrivalSamples_ >= RequiredArrivalSamples) {
             arrivalPollTimer_.stop();

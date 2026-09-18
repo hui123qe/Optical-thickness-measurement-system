@@ -2,7 +2,7 @@
 
 namespace otms::device {
 
-bool g_useVirtualMotionDriver = true;
-bool g_useVirtualLaserProbe = true;
+bool g_useVirtualMotionDriver = false;
+bool g_useVirtualLaserProbe = false;
 
 } // namespace otms::device
