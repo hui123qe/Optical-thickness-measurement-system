@@ -23,6 +23,7 @@ namespace {
 constexpr long InvalidArgumentCode = -1;
 constexpr long NotConnectedCode = -2;
 constexpr long InvalidMeasurementCode = -3;
+constexpr long InvalidDisplayUnitCode = -4;
 
 bool isVendorConnectionFailure(long vendorCode)
 {
@@ -60,6 +61,36 @@ MeasurementJudgment judgmentFromVendor(BYTE judgeResult)
         return MeasurementJudgment::Low;
     }
     return MeasurementJudgment::Unknown;
+}
+
+bool displayUnitMillimeters(
+    CL3IF_DISPLAYUNIT displayUnit,
+    double& resultMillimeters)
+{
+    switch (displayUnit) {
+    case CL3IF_DISPLAYUNIT_0_01MM:
+        resultMillimeters = 0.01;
+        return true;
+    case CL3IF_DISPLAYUNIT_0_001MM:
+        resultMillimeters = 0.001;
+        return true;
+    case CL3IF_DISPLAYUNIT_0_0001MM:
+        resultMillimeters = 0.0001;
+        return true;
+    case CL3IF_DISPLAYUNIT_0_00001MM:
+        resultMillimeters = 0.00001;
+        return true;
+    case CL3IF_DISPLAYUNIT_0_1UM:
+        resultMillimeters = 0.0001;
+        return true;
+    case CL3IF_DISPLAYUNIT_0_01UM:
+        resultMillimeters = 0.00001;
+        return true;
+    case CL3IF_DISPLAYUNIT_0_001UM:
+        resultMillimeters = 0.000001;
+        return true;
+    }
+    return false;
 }
 
 QString vendorErrorMessage(long vendorCode)
@@ -101,6 +132,8 @@ QString vendorErrorMessage(long vendorCode)
         return QStringLiteral("激光控制器尚未连接");
     case InvalidMeasurementCode:
         return QStringLiteral("当前测量值无效，不能设置零点");
+    case InvalidDisplayUnitCode:
+        return QStringLiteral("控制器返回了无法识别的最小显示单位");
     default:
         return QStringLiteral("未识别的错误码");
     }
@@ -125,8 +158,6 @@ Cl3000LaserDriver::~Cl3000LaserDriver()
 LaserStatus Cl3000LaserDriver::setConfig(const LaserProbeConfig& config)
 {
     if (!validOutput(config.measurementOutput)
-        || !std::isfinite(config.micrometersPerCount)
-        || config.micrometersPerCount <= 0.0
         || config.measurementTimeout.count() <= 0
         || config.pollingInterval.count() <= 0
         || config.softwareTriggerPulseWidth.count() <= 0
@@ -279,7 +310,7 @@ LaserStatus Cl3000LaserDriver::setZero(LaserOutput output)
     }
 
     LaserMeasurement referenceMeasurement;
-    const LaserStatus measurementStatus = readMeasurementFrame(output, referenceMeasurement);
+    const LaserStatus measurementStatus = readLatest(output, referenceMeasurement);
     if (!measurementStatus.ok()) {
         return measurementStatus;
     }
@@ -360,7 +391,12 @@ LaserStatus Cl3000LaserDriver::readLatest(LaserOutput output, LaserMeasurement& 
     if (!connectionStatus.ok()) {
         return connectionStatus;
     }
-    return readMeasurementFrame(output, measurement);
+    double displayUnit = 0.0;
+    const LaserStatus displayUnitStatus = readDisplayUnit(output, displayUnit);
+    if (!displayUnitStatus.ok()) {
+        return displayUnitStatus;
+    }
+    return readMeasurementFrame(output, displayUnit, measurement);
 }
 
 LaserStatus Cl3000LaserDriver::measureOnce(
@@ -376,8 +412,14 @@ LaserStatus Cl3000LaserDriver::measureOnce(
         return makeStatus(InvalidArgumentCode, QStringLiteral("单点测量"));
     }
 
+    double displayUnit = 0.0;
+    LaserStatus status = readDisplayUnit(output, displayUnit);
+    if (!status.ok()) {
+        return status;
+    }
+
     LaserMeasurement baseline;
-    LaserStatus status = readMeasurementFrame(output, baseline);
+    status = readMeasurementFrame(output, displayUnit, baseline);
     if (!status.ok()) {
         return status;
     }
@@ -408,7 +450,7 @@ LaserStatus Cl3000LaserDriver::measureOnce(
     const std::chrono::milliseconds pollingInterval = std::min(config_.pollingInterval, timeout);
     while (std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(pollingInterval);
-        status = readMeasurementFrame(output, measurement);
+        status = readMeasurementFrame(output, displayUnit, measurement);
         if (!status.ok()) {
             return status;
         }
@@ -456,11 +498,41 @@ LaserStatus Cl3000LaserDriver::makeVendorStatus(long vendorCode, const QString& 
     return status;
 }
 
-LaserStatus Cl3000LaserDriver::readMeasurementFrame(
+LaserStatus Cl3000LaserDriver::readDisplayUnit(
     LaserOutput output,
-    LaserMeasurement& measurement)
+    double& resultMillimeters)
 {
     if (!validOutput(output)) {
+        return makeStatus(InvalidArgumentCode, QStringLiteral("读取最小显示单位"));
+    }
+
+    BYTE programNumber = 0;
+    LONG returnCode = CL3IF_GetProgramNo(deviceId_, &programNumber);
+    if (returnCode != CL3IF_RC_OK) {
+        return makeVendorStatus(returnCode, QStringLiteral("读取当前程序"));
+    }
+
+    CL3IF_DISPLAYUNIT displayUnit{};
+    returnCode = CL3IF_GetDisplayUnit(
+        deviceId_,
+        programNumber,
+        static_cast<BYTE>(output),
+        &displayUnit);
+    if (returnCode != CL3IF_RC_OK) {
+        return makeVendorStatus(returnCode, QStringLiteral("读取最小显示单位"));
+    }
+    if (!displayUnitMillimeters(displayUnit, resultMillimeters)) {
+        return makeStatus(InvalidDisplayUnitCode, QStringLiteral("读取最小显示单位"));
+    }
+    return makeStatus(CL3IF_RC_OK, QStringLiteral("读取最小显示单位"));
+}
+
+LaserStatus Cl3000LaserDriver::readMeasurementFrame(
+    LaserOutput output,
+    double displayUnit,
+    LaserMeasurement& measurement)
+{
+    if (!validOutput(output) || !std::isfinite(displayUnit) || displayUnit <= 0.0) {
         return makeStatus(InvalidArgumentCode, QStringLiteral("读取测量值"));
     }
 
@@ -474,8 +546,9 @@ LaserStatus Cl3000LaserDriver::readMeasurementFrame(
     const CL3IF_OUTMEASUREMENT_DATA& outputData = vendorMeasurement.outMeasurementData[outputIndex];
     measurement.output = output;
     measurement.rawValue = outputData.measurementValue;
-    measurement.valueMicrometers = static_cast<double>(outputData.measurementValue)
-        * config_.micrometersPerCount;
+    measurement.displayUnitMillimeters = displayUnit;
+    measurement.valueMillimeters =
+        static_cast<double>(outputData.measurementValue) * displayUnit;
     measurement.quality = qualityFromVendor(outputData.valueInfo);
     measurement.judgment = judgmentFromVendor(outputData.judgeResult);
     measurement.triggerCount = vendorMeasurement.addInfo.triggerCount;

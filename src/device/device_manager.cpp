@@ -180,19 +180,6 @@ LaserStatus loadStoredLaserConfiguration(StoredLaserConfiguration& config)
             QStringLiteral("cl3000.softwareTriggerPulseWidthMs 必须是 1～60000 的整数"));
     }
 
-    double micrometersPerCount = 0.001;
-    const QJsonValue micrometersPerCountValue =
-        cl3000.value(QStringLiteral("micrometersPerCount"));
-    if (!micrometersPerCountValue.isUndefined()) {
-        if (!micrometersPerCountValue.isDouble()
-            || !std::isfinite(micrometersPerCountValue.toDouble())
-            || micrometersPerCountValue.toDouble() <= 0.0) {
-            return configurationError(
-                QStringLiteral("cl3000.micrometersPerCount 必须是大于 0 的数值"));
-        }
-        micrometersPerCount = micrometersPerCountValue.toDouble();
-    }
-
     const QJsonValue ipAddressValue = cl3000.value(QStringLiteral("ipAddress"));
     if (!ipAddressValue.isString()) {
         return configurationError(QStringLiteral("cl3000.ipAddress 必须是 IPv4 字符串"));
@@ -221,7 +208,6 @@ LaserStatus loadStoredLaserConfiguration(StoredLaserConfiguration& config)
         std::chrono::milliseconds(timeoutMs)};
     config.probe = LaserProbeConfig{
         static_cast<LaserOutput>(measurementOutput - 1),
-        micrometersPerCount,
         std::chrono::milliseconds(measurementTimeoutMs),
         std::chrono::milliseconds(pollingIntervalMs),
         std::chrono::milliseconds(softwareTriggerPulseWidthMs)};
@@ -254,9 +240,6 @@ LaserStatus saveStoredLaserConfiguration(const StoredLaserConfiguration& config)
     cl3000.insert(
         QStringLiteral("measurementOutput"),
         static_cast<int>(config.probe.measurementOutput) + 1);
-    cl3000.insert(
-        QStringLiteral("micrometersPerCount"),
-        config.probe.micrometersPerCount);
     cl3000.insert(
         QStringLiteral("measurementTimeoutMs"),
         static_cast<qint64>(config.probe.measurementTimeout.count()));
@@ -343,6 +326,7 @@ LaserStatus DeviceManager::loadLaserConfiguration(std::uint8_t& programNumber)
     laserEthernetConfig_ = stored.ethernet;
     laserEthernetConfigured_ = true;
     programNumber = stored.programNumber;
+    laserProgramNumber_ = stored.programNumber;
     return loadStatus;
 }
 
@@ -426,6 +410,11 @@ bool DeviceManager::isLaserConnected() const noexcept
 bool DeviceManager::isLaserMeasuring() const noexcept
 {
     return laserMeasuring_;
+}
+
+std::uint8_t DeviceManager::laserProgramNumber() const noexcept
+{
+    return laserProgramNumber_;
 }
 
 LaserStatus DeviceManager::observeLaserCommand(const LaserStatus& status)
@@ -519,7 +508,13 @@ LaserStatus DeviceManager::resetLaserOutput(LaserOutput output)
 
 LaserStatus DeviceManager::selectLaserProgram(std::uint8_t programNumber)
 {
-    return observeLaserCommand(laserProbe_->selectProgram(programNumber));
+    const LaserStatus status =
+        observeLaserCommand(laserProbe_->selectProgram(programNumber));
+    if (status.ok() && laserProgramNumber_ != programNumber) {
+        laserProgramNumber_ = programNumber;
+        emit laserProgramChanged(laserProgramNumber_);
+    }
+    return status;
 }
 
 LaserStatus DeviceManager::currentLaserProgram(std::uint8_t& programNumber)

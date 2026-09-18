@@ -43,7 +43,13 @@ private:
     LaserStatus requireConnection() const;
     LaserStatus makeStatus(long vendorCode, const QString& operation) const;
     LaserStatus makeVendorStatus(long vendorCode, const QString& operation);
-    LaserStatus readMeasurementFrame(LaserOutput output, LaserMeasurement& measurement);
+    LaserStatus readDisplayUnit(
+        LaserOutput output,
+        double& displayUnitMillimeters);
+    LaserStatus readMeasurementFrame(
+        LaserOutput output,
+        double displayUnitMillimeters,
+        LaserMeasurement& measurement);
     static bool validOutput(LaserOutput output);
 
     LaserProbeConfig config_;

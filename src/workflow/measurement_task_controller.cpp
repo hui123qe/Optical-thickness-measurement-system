@@ -1029,13 +1029,18 @@ void MeasurementTaskController::measurePoint(
         return;
     }
     if (measurement.quality != otms::device::MeasurementQuality::Valid
-        || !std::isfinite(measurement.valueMicrometers)) {
+        || !std::isfinite(measurement.displayUnitMillimeters)
+        || measurement.displayUnitMillimeters <= 0.0
+        || !std::isfinite(measurement.valueMillimeters)) {
         qCCritical(measurementWorkflowLog).noquote()
-            << QStringLiteral("激光采集值无效：runId=%1 point=%2 quality=%3 value=%4um")
+            << QStringLiteral(
+                   "激光采集值无效：runId=%1 point=%2 quality=%3 raw=%4 displayUnit=%5mm/count value=%6mm")
                    .arg(logRunId(taskRunId))
                    .arg(pointIndex + 1)
                    .arg(static_cast<int>(measurement.quality))
-                   .arg(measurement.valueMicrometers, 0, 'f', 3);
+                   .arg(measurement.rawValue)
+                   .arg(measurement.displayUnitMillimeters, 0, 'g', 12)
+                   .arg(measurement.valueMillimeters, 0, 'f', 6);
         executor_.notifyMeasurementFailed(executionId, pointIndex, QStringLiteral("激光测量值无效。"));
         return;
     }
@@ -1043,11 +1048,13 @@ void MeasurementTaskController::measurePoint(
     const QDateTime measuredAt = QDateTime::currentDateTimeUtc();
     qCInfo(measurementWorkflowLog).noquote()
         << QStringLiteral(
-               "采集完成：runId=%1 point=%2 description=%3 thickness=%4um quality=%5 trigger=%6 measuredAt=%7")
+               "采集完成：runId=%1 point=%2 description=%3 raw=%4 displayUnit=%5mm/count thickness=%6mm quality=%7 trigger=%8 measuredAt=%9")
                .arg(logRunId(taskRunId))
                .arg(pointIndex + 1)
                .arg(point.pointDescription)
-               .arg(measurement.valueMicrometers, 0, 'f', 3)
+               .arg(measurement.rawValue)
+               .arg(measurement.displayUnitMillimeters, 0, 'g', 12)
+               .arg(measurement.valueMillimeters, 0, 'f', 6)
                .arg(static_cast<int>(measurement.quality))
                .arg(measurement.triggerCount)
                .arg(measuredAt.toString(Qt::ISODateWithMs));
@@ -1058,7 +1065,9 @@ void MeasurementTaskController::measurePoint(
             point.pointDescription,
             actualMotorPosition,
             point.workpiecePoint,
-            measurement.valueMicrometers,
+            measurement.rawValue,
+            measurement.displayUnitMillimeters,
+            measurement.valueMillimeters,
             measuredAt,
             &databaseError)) {
         qCCritical(measurementWorkflowLog).noquote()
@@ -1076,9 +1085,9 @@ void MeasurementTaskController::measurePoint(
                .arg(pointIndex + 1)
                .arg(point.pointDescription);
 
-    emit measurementAvailable(measurement.valueMicrometers / 1000.0);
+    emit measurementAvailable(measurement.valueMillimeters);
     executor_.notifyMeasurementCompleted(
-        executionId, pointIndex, measurement.valueMicrometers, measuredAt);
+        executionId, pointIndex, measurement.valueMillimeters, measuredAt);
 }
 
 void MeasurementTaskController::stopMotion(quint64 executionId)

@@ -6,7 +6,6 @@
 #include "../device/laser_probe.h"
 
 class QComboBox;
-class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
 class QSpinBox;
@@ -24,7 +23,7 @@ private slots:
     void saveProbeConfig();
     void connectLaser();
     void disconnectLaser();
-    void selectLaserProgram();
+    void selectLaserProgram(int index);
     void enableLaser();
     void disableLaser();
     void startLaserMeasurement();
@@ -44,15 +43,15 @@ private:
     void updateControls();
     bool confirmHardwareAction(const QString& title, const QString& detail);
 
-    QSpinBox* programInput_{};
+    QComboBox* programInput_{};
     QComboBox* outputInput_{};
-    QDoubleSpinBox* scaleInput_{};
     QSpinBox* measurementTimeoutInput_{};
     QSpinBox* pollingIntervalInput_{};
 
     QLabel* connectionState_{};
     QLabel* rawValue_{};
-    QLabel* convertedValue_{};
+    QLabel* displayUnit_{};
+    QLabel* measuredValue_{};
     QLabel* quality_{};
     QLabel* judgment_{};
     QLabel* triggerCount_{};

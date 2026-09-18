@@ -6,6 +6,8 @@
 #include <QSqlDatabase>
 #include <QString>
 
+#include <cstdint>
+
 struct TaskLogRecord
 {
     qint64 id{};
@@ -22,7 +24,9 @@ struct MeasurementRecord
     QString pointDescription;
     QPointF motorPosition;
     QPointF workpiecePosition;
-    double thicknessMicrometers{};
+    std::int32_t rawValue{};
+    double displayUnitMillimeters{};
+    double thicknessMillimeters{};
     QDateTime measuredAt;
 };
 
@@ -46,7 +50,9 @@ public:
         const QString& pointDescription,
         const QPointF& actualMotorPosition,
         const QPointF& workpiecePoint,
-        double thicknessMicrometers,
+        std::int32_t rawValue,
+        double displayUnitMillimeters,
+        double thicknessMillimeters,
         const QDateTime& measuredAt,
         QString* errorMessage = nullptr);
     bool insertTaskLog(

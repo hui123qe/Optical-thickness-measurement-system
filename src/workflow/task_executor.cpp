@@ -272,7 +272,7 @@ void TaskExecutor::notifyMotionStopped(quint64 executionId)
 void TaskExecutor::notifyMeasurementCompleted(
     quint64 executionId,
     int pointIndex,
-    double measurement,
+    double measurementMillimeters,
     const QDateTime& measuredAt)
 {
     if (phase_ != ExecutionPhase::Measuring || !matchesCurrentPoint(executionId, pointIndex)) {
@@ -283,7 +283,7 @@ void TaskExecutor::notifyMeasurementCompleted(
     results_.append(TaskPointResult{
         point,
         currentActualMotorPosition_,
-        measurement,
+        measurementMillimeters,
         measuredAt});
     emit pointCompleted(
         taskRunId_,
@@ -291,7 +291,7 @@ void TaskExecutor::notifyMeasurementCompleted(
         currentPointIndex_,
         point,
         currentActualMotorPosition_,
-        measurement,
+        measurementMillimeters,
         measuredAt);
 
     ++currentPointIndex_;

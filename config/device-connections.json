@@ -80,7 +80,6 @@
     "connectionTimeoutMs": 3000,
     "programNumber": 0,
     "measurementOutput": 1,
-    "micrometersPerCount": 0.001,
     "measurementTimeoutMs": 1000,
     "pollingIntervalMs": 10,
     "softwareTriggerPulseWidthMs": 10

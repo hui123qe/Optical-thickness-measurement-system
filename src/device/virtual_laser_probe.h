@@ -46,7 +46,7 @@ private:
     bool measuring_{};
     std::uint8_t programNumber_{};
     std::uint32_t triggerCount_{};
-    double zeroOffsetMicrometers_{};
+    double zeroOffsetMillimeters_{};
 };
 
 } // namespace otms::device

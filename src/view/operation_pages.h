@@ -9,6 +9,7 @@
 #include <QTransform>
 #include <QWidget>
 
+#include <cstdint>
 #include <optional>
 
 class QComboBox;
@@ -41,6 +42,7 @@ public:
 public slots:
     void setLaserConnectionState(bool connected);
     void setLaserMeasurementState(bool measuring);
+    void setLaserProgramNumber(std::uint8_t programNumber);
     void setAxisEnableState(MotorAxis axis, bool available, bool enabled);
 
 signals:
@@ -54,6 +56,7 @@ signals:
     void currentPositionExportRequested();
     void laserMeasurementStartRequested();
     void laserMeasurementStopRequested();
+    void laserProgramChangeRequested(std::uint8_t programNumber);
     void taskStateChangeRequested(const QString& state, const QString& detail, const QString& styleClass);
     void automaticTaskPrepared(
         const QString& taskType,
@@ -86,6 +89,7 @@ private:
     QPushButton* startLaserMeasurement_{};
     QPushButton* stopLaserMeasurement_{};
     QLabel* laserMeasurementState_{};
+    QComboBox* laserProgramSelector_{};
     ManualControlWidget* manualControl_{};
     bool laserConnected_{};
     bool laserMeasuring_{};

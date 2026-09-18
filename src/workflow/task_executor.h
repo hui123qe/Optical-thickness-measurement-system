@@ -20,7 +20,7 @@ struct TaskPointResult
 {
     TaskExecutionPoint point;
     QPointF actualMotorPosition;
-    double measurement{};
+    double measurementMillimeters{};
     QDateTime measuredAt;
 };
 
@@ -76,7 +76,7 @@ public slots:
     void notifyMeasurementCompleted(
         quint64 executionId,
         int pointIndex,
-        double measurement,
+        double measurementMillimeters,
         const QDateTime& measuredAt);
     void notifyMeasurementFailed(quint64 executionId, int pointIndex, const QString& reason);
     void notifyProbeStopped(quint64 executionId);
@@ -112,7 +112,7 @@ signals:
         int pointIndex,
         const TaskExecutionPoint& point,
         const QPointF& actualMotorPosition,
-        double measurement,
+        double measurementMillimeters,
         const QDateTime& measuredAt);
     void executionCompleted(quint64 executionId, int pointCount);
     void executionTerminated(quint64 executionId);

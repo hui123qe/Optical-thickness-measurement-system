@@ -9,15 +9,14 @@ namespace {
 constexpr long InvalidArgumentCode = -1;
 constexpr long NotConnectedCode = -2;
 constexpr long NotMeasuringCode = -3;
-constexpr double DefaultMeasurementMicrometers = 1000.0;
+constexpr double VirtualDisplayUnitMillimeters = 0.001;
+constexpr double DefaultMeasurementMillimeters = 1.0;
 
 } // namespace
 
 LaserStatus VirtualLaserProbe::setConfig(const LaserProbeConfig& config)
 {
     if (!validOutput(config.measurementOutput)
-        || !std::isfinite(config.micrometersPerCount)
-        || config.micrometersPerCount <= 0.0
         || config.measurementTimeout.count() <= 0
         || config.pollingInterval.count() <= 0
         || config.softwareTriggerPulseWidth.count() <= 0
@@ -122,7 +121,7 @@ LaserStatus VirtualLaserProbe::setZero(LaserOutput output)
         return failure(InvalidArgumentCode, QStringLiteral("虚拟激光输出编号无效"));
     }
 
-    zeroOffsetMicrometers_ = DefaultMeasurementMicrometers;
+    zeroOffsetMillimeters_ = DefaultMeasurementMillimeters;
     return success(QStringLiteral("设置虚拟零点"));
 }
 
@@ -136,7 +135,7 @@ LaserStatus VirtualLaserProbe::clearZero(LaserOutput output)
         return failure(InvalidArgumentCode, QStringLiteral("虚拟激光输出编号无效"));
     }
 
-    zeroOffsetMicrometers_ = 0.0;
+    zeroOffsetMillimeters_ = 0.0;
     return success(QStringLiteral("清除虚拟零点"));
 }
 
@@ -234,8 +233,9 @@ LaserStatus VirtualLaserProbe::captureMeasurement(
         return failure(InvalidArgumentCode, QStringLiteral("虚拟激光输出编号无效"));
     }
 
-    const double valueMicrometers = DefaultMeasurementMicrometers - zeroOffsetMicrometers_;
-    const double rawValue = valueMicrometers / config_.micrometersPerCount;
+    const double valueMillimeters =
+        DefaultMeasurementMillimeters - zeroOffsetMillimeters_;
+    const double rawValue = valueMillimeters / VirtualDisplayUnitMillimeters;
     if (rawValue < static_cast<double>(std::numeric_limits<std::int32_t>::min())
         || rawValue > static_cast<double>(std::numeric_limits<std::int32_t>::max())) {
         return failure(InvalidArgumentCode, QStringLiteral("虚拟测量值超出原始数据范围"));
@@ -244,7 +244,8 @@ LaserStatus VirtualLaserProbe::captureMeasurement(
     ++triggerCount_;
     measurement.output = output;
     measurement.rawValue = static_cast<std::int32_t>(std::llround(rawValue));
-    measurement.valueMicrometers = valueMicrometers;
+    measurement.displayUnitMillimeters = VirtualDisplayUnitMillimeters;
+    measurement.valueMillimeters = valueMillimeters;
     measurement.quality = MeasurementQuality::Valid;
     measurement.judgment = MeasurementJudgment::Good;
     measurement.triggerCount = triggerCount_;

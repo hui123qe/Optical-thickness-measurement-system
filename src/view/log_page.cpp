@@ -213,7 +213,7 @@ void LogPage::exportSelectedRecord()
     headerFormat.setVerticalAlignment(QXlsx::Format::AlignVCenter);
 
     QXlsx::Format numberFormat;
-    numberFormat.setNumberFormat(QStringLiteral("0.000"));
+    numberFormat.setNumberFormat(QStringLiteral("0.000000"));
 
     QXlsx::Format dateTimeFormat;
     dateTimeFormat.setNumberFormat(QStringLiteral("yyyy-mm-dd hh:mm:ss.000"));
@@ -225,7 +225,9 @@ void LogPage::exportSelectedRecord()
         QStringLiteral("电机Y(mm)"),
         QStringLiteral("物料xw(mm)"),
         QStringLiteral("物料yw(mm)"),
-        QStringLiteral("厚度(um)"),
+        QStringLiteral("原始值"),
+        QStringLiteral("最小显示单位(mm/count)"),
+        QStringLiteral("厚度(mm)"),
         QStringLiteral("测量时间")};
     for (int column = 0; column < headers.size(); ++column) {
         workbookReady = workbook.write(1, column + 1, headers.at(column), headerFormat)
@@ -252,11 +254,23 @@ void LogPage::exportSelectedRecord()
                             worksheetRow, 6, measurement.workpiecePosition.y(), numberFormat)
             && workbookReady;
         workbookReady = workbook.write(
-                            worksheetRow, 7, measurement.thicknessMicrometers, numberFormat)
+                            worksheetRow, 7, measurement.rawValue)
             && workbookReady;
         workbookReady = workbook.write(
                             worksheetRow,
                             8,
+                            measurement.displayUnitMillimeters,
+                            numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow,
+                            9,
+                            measurement.thicknessMillimeters,
+                            numberFormat)
+            && workbookReady;
+        workbookReady = workbook.write(
+                            worksheetRow,
+                            10,
                             QVariant::fromValue(measurement.measuredAt),
                             dateTimeFormat)
             && workbookReady;
@@ -266,8 +280,8 @@ void LogPage::exportSelectedRecord()
     workbookReady = workbook.setRowHeight(1, 22.0) && workbookReady;
     workbookReady = workbook.setColumnWidth(1, 10.0) && workbookReady;
     workbookReady = workbook.setColumnWidth(2, 20.0) && workbookReady;
-    workbookReady = workbook.setColumnWidth(3, 7, 15.0) && workbookReady;
-    workbookReady = workbook.setColumnWidth(8, 24.0) && workbookReady;
+    workbookReady = workbook.setColumnWidth(3, 9, 15.0) && workbookReady;
+    workbookReady = workbook.setColumnWidth(10, 24.0) && workbookReady;
     if (!workbookReady) {
         QMessageBox::critical(
             this,

@@ -32,6 +32,7 @@ public:
     LaserStatus disconnectLaser();
     [[nodiscard]] bool isLaserConnected() const noexcept;
     [[nodiscard]] bool isLaserMeasuring() const noexcept;
+    [[nodiscard]] std::uint8_t laserProgramNumber() const noexcept;
 
     LaserStatus enableLaser();
     LaserStatus disableLaser();
@@ -49,6 +50,7 @@ signals:
     void laserConnectionChanged(bool connected, const QString& detail);
     void laserMeasurementStateChanged(bool measuring);
     void laserMeasurementUpdated(const LaserMeasurement& measurement);
+    void laserProgramChanged(std::uint8_t programNumber);
 
 private slots:
     void pollLaserMeasurement();
@@ -63,6 +65,7 @@ private:
     bool laserEthernetConfigured_{};
     bool reportedLaserConnected_{};
     bool laserMeasuring_{};
+    std::uint8_t laserProgramNumber_{};
     QTimer laserMeasurementPollTimer_;
 };
 

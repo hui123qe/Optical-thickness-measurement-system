@@ -100,7 +100,9 @@ bool MeasurementDatabase::prepareExperiment(
         "motor_y REAL NOT NULL,"
         "workpiece_x REAL NOT NULL,"
         "workpiece_y REAL NOT NULL,"
-        "thickness_micrometers REAL NOT NULL,"
+        "raw_value INTEGER NOT NULL,"
+        "display_unit_millimeters REAL NOT NULL,"
+        "thickness_millimeters REAL NOT NULL,"
         "measured_at_utc_ms INTEGER NOT NULL)")
                                        .arg(resolvedTableName);
     if (!executeSchemaStatement(createTableSql, errorMessage)) {
@@ -118,7 +120,9 @@ bool MeasurementDatabase::insertMeasurement(
     const QString& pointDescription,
     const QPointF& actualMotorPosition,
     const QPointF& workpiecePoint,
-    double thicknessMicrometers,
+    std::int32_t rawValue,
+    double displayUnitMillimeters,
+    double thicknessMillimeters,
     const QDateTime& measuredAt,
     QString* errorMessage)
 {
@@ -129,7 +133,8 @@ bool MeasurementDatabase::insertMeasurement(
         || !measuredAt.isValid()
         || !std::isfinite(actualMotorPosition.x()) || !std::isfinite(actualMotorPosition.y())
         || !std::isfinite(workpiecePoint.x()) || !std::isfinite(workpiecePoint.y())
-        || !std::isfinite(thicknessMicrometers)) {
+        || !std::isfinite(displayUnitMillimeters) || displayUnitMillimeters <= 0.0
+        || !std::isfinite(thicknessMillimeters)) {
         setError(errorMessage, QStringLiteral("测量记录包含无效数据。"));
         return false;
     }
@@ -143,8 +148,8 @@ bool MeasurementDatabase::insertMeasurement(
     query.prepare(QStringLiteral(
         "INSERT INTO %1 ("
         "point_index, point_description, motor_x, motor_y, workpiece_x, workpiece_y, "
-        "thickness_micrometers, measured_at_utc_ms) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        "raw_value, display_unit_millimeters, thickness_millimeters, measured_at_utc_ms) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                       .arg(tableName));
     query.addBindValue(pointIndex + 1);
     query.addBindValue(pointDescription);
@@ -152,7 +157,9 @@ bool MeasurementDatabase::insertMeasurement(
     query.addBindValue(actualMotorPosition.y());
     query.addBindValue(workpiecePoint.x());
     query.addBindValue(workpiecePoint.y());
-    query.addBindValue(thicknessMicrometers);
+    query.addBindValue(rawValue);
+    query.addBindValue(displayUnitMillimeters);
+    query.addBindValue(thicknessMillimeters);
     query.addBindValue(measuredAt.toUTC().toMSecsSinceEpoch());
     if (!query.exec()) {
         setError(errorMessage, QStringLiteral("写入测量记录失败：%1").arg(query.lastError().text()));
@@ -249,7 +256,7 @@ QList<MeasurementRecord> MeasurementDatabase::queryMeasurements(
     QSqlQuery query(database_);
     const QString sql = QStringLiteral(
         "SELECT point_index, point_description, motor_x, motor_y, workpiece_x, workpiece_y, "
-        "thickness_micrometers, measured_at_utc_ms "
+        "raw_value, display_unit_millimeters, thickness_millimeters, measured_at_utc_ms "
         "FROM %1 ORDER BY point_index ASC")
                             .arg(tableName);
     if (!query.exec(sql)) {
@@ -265,8 +272,10 @@ QList<MeasurementRecord> MeasurementDatabase::queryMeasurements(
             query.value(1).toString(),
             QPointF(query.value(2).toDouble(), query.value(3).toDouble()),
             QPointF(query.value(4).toDouble(), query.value(5).toDouble()),
-            query.value(6).toDouble(),
-            QDateTime::fromMSecsSinceEpoch(query.value(7).toLongLong(), Qt::UTC)
+            query.value(6).toInt(),
+            query.value(7).toDouble(),
+            query.value(8).toDouble(),
+            QDateTime::fromMSecsSinceEpoch(query.value(9).toLongLong(), Qt::UTC)
                 .toLocalTime()});
     }
     return records;

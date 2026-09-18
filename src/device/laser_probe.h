@@ -60,7 +60,6 @@ struct LaserEthernetConfig
 struct LaserProbeConfig
 {
     LaserOutput measurementOutput{LaserOutput::Out1};
-    double micrometersPerCount{1.0};
     std::chrono::milliseconds measurementTimeout{1000};
     std::chrono::milliseconds pollingInterval{10};
     std::chrono::milliseconds softwareTriggerPulseWidth{10};
@@ -70,7 +69,8 @@ struct LaserMeasurement
 {
     LaserOutput output{LaserOutput::Out1};
     std::int32_t rawValue{};
-    double valueMicrometers{};
+    double displayUnitMillimeters{};
+    double valueMillimeters{};
     MeasurementQuality quality{MeasurementQuality::Invalid};
     MeasurementJudgment judgment{MeasurementJudgment::Unknown};
     std::uint32_t triggerCount{};

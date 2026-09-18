@@ -7,7 +7,6 @@
 
 #include <QComboBox>
 #include <QDateTime>
-#include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -15,6 +14,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStyle>
 #include <QTextEdit>
@@ -92,11 +92,11 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
 
     QGroupBox* programGroup = new QGroupBox(QStringLiteral("控制器程序"));
     QFormLayout* programLayout = new QFormLayout(programGroup);
-    programInput_ = new QSpinBox;
-    programInput_->setRange(0, 7);
-    QPushButton* selectProgramButton = new QPushButton(QStringLiteral("切换程序"));
+    programInput_ = new QComboBox;
+    for (int programNumber = 0; programNumber <= 7; ++programNumber) {
+        programInput_->addItem(QString::number(programNumber), programNumber);
+    }
     programLayout->addRow(QStringLiteral("程序号"), programInput_);
-    programLayout->addRow(selectProgramButton);
     settingsLayout->addWidget(programGroup, 1);
 
     QGroupBox* measurementConfigGroup = new QGroupBox(QStringLiteral("单点测量参数"));
@@ -105,11 +105,6 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     for (int outputIndex = 0; outputIndex < 8; ++outputIndex) {
         outputInput_->addItem(QStringLiteral("OUT%1").arg(outputIndex + 1), outputIndex);
     }
-    scaleInput_ = new QDoubleSpinBox;
-    scaleInput_->setDecimals(6);
-    scaleInput_->setRange(0.000001, 1000000.0);
-    scaleInput_->setValue(0.001);
-    scaleInput_->setSuffix(QStringLiteral(" μm/count"));
     measurementTimeoutInput_ = new QSpinBox;
     measurementTimeoutInput_->setRange(100, 60000);
     measurementTimeoutInput_->setValue(1000);
@@ -119,13 +114,8 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     pollingIntervalInput_->setValue(10);
     pollingIntervalInput_->setSuffix(QStringLiteral(" ms"));
     measurementConfigLayout->addRow(QStringLiteral("测量输出"), outputInput_);
-    measurementConfigLayout->addRow(QStringLiteral("数值换算"), scaleInput_);
     measurementConfigLayout->addRow(QStringLiteral("测量超时"), measurementTimeoutInput_);
     measurementConfigLayout->addRow(QStringLiteral("轮询间隔"), pollingIntervalInput_);
-    QLabel* scaleHint = new QLabel(QStringLiteral("换算系数必须与 CL-Navigator 当前程序的显示单位一致。"));
-    scaleHint->setWordWrap(true);
-    scaleHint->setProperty("role", "muted");
-    measurementConfigLayout->addRow(scaleHint);
     QPushButton* saveConfigButton = new QPushButton(QStringLiteral("保存参数"));
     measurementConfigLayout->addRow(saveConfigButton);
     settingsLayout->addWidget(measurementConfigGroup, 1);
@@ -152,7 +142,6 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     operationLayout->addWidget(readLatestButton, 1, 3);
     operationLayout->addWidget(measureOnceButton, 1, 4);
     connectedControls_ = {
-        selectProgramButton,
         enableLaserButton,
         disableLaserButton,
         startMeasurementButton,
@@ -168,12 +157,14 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     QGroupBox* measurementResultGroup = new QGroupBox(QStringLiteral("测量结果"));
     QFormLayout* measurementResultLayout = new QFormLayout(measurementResultGroup);
     rawValue_ = new QLabel(QStringLiteral("--"));
-    convertedValue_ = new QLabel(QStringLiteral("-- μm"));
+    displayUnit_ = new QLabel(QStringLiteral("-- mm/count"));
+    measuredValue_ = new QLabel(QStringLiteral("-- mm"));
     quality_ = new QLabel(QStringLiteral("--"));
     judgment_ = new QLabel(QStringLiteral("--"));
     triggerCount_ = new QLabel(QStringLiteral("--"));
     measurementResultLayout->addRow(QStringLiteral("原始值"), rawValue_);
-    measurementResultLayout->addRow(QStringLiteral("换算值"), convertedValue_);
+    measurementResultLayout->addRow(QStringLiteral("最小显示单位"), displayUnit_);
+    measurementResultLayout->addRow(QStringLiteral("测量值"), measuredValue_);
     measurementResultLayout->addRow(QStringLiteral("数据质量"), quality_);
     measurementResultLayout->addRow(QStringLiteral("判定"), judgment_);
     measurementResultLayout->addRow(QStringLiteral("触发计数"), triggerCount_);
@@ -190,6 +181,11 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     DeviceManager& manager = DeviceManager::instance();
     connect(&manager, &DeviceManager::laserConnectionChanged,
         this, &LaserDebugPage::updateConnectionState);
+    connect(&manager, &DeviceManager::laserProgramChanged, this,
+        [this](std::uint8_t programNumber) {
+            const QSignalBlocker blocker(programInput_);
+            programInput_->setCurrentIndex(static_cast<int>(programNumber));
+        });
 
     std::uint8_t configuredProgram = 0;
     const LaserStatus loadConfigurationStatus =
@@ -197,9 +193,8 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     appendStatus(QStringLiteral("加载设备配置"), loadConfigurationStatus);
     if (loadConfigurationStatus.ok()) {
         const otms::device::LaserProbeConfig config = manager.laserProbeConfig();
-        programInput_->setValue(configuredProgram);
+        programInput_->setCurrentIndex(static_cast<int>(configuredProgram));
         outputInput_->setCurrentIndex(static_cast<int>(config.measurementOutput));
-        scaleInput_->setValue(config.micrometersPerCount);
         measurementTimeoutInput_->setValue(
             static_cast<int>(config.measurementTimeout.count()));
         pollingIntervalInput_->setValue(
@@ -207,8 +202,6 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
     }
 
     connect(outputInput_, &QComboBox::currentIndexChanged,
-        this, &LaserDebugPage::applyProbeConfigFromControl);
-    connect(scaleInput_, &QDoubleSpinBox::valueChanged,
         this, &LaserDebugPage::applyProbeConfigFromControl);
     connect(measurementTimeoutInput_, &QSpinBox::valueChanged,
         this, &LaserDebugPage::applyProbeConfigFromControl);
@@ -221,7 +214,7 @@ LaserDebugPage::LaserDebugPage(QWidget* parent)
         this, &LaserDebugPage::connectLaser);
     connect(disconnectButton_, &QPushButton::clicked,
         this, &LaserDebugPage::disconnectLaser);
-    connect(selectProgramButton, &QPushButton::clicked,
+    connect(programInput_, &QComboBox::currentIndexChanged,
         this, &LaserDebugPage::selectLaserProgram);
     connect(enableLaserButton, &QPushButton::clicked,
         this, &LaserDebugPage::enableLaser);
@@ -260,7 +253,7 @@ void LaserDebugPage::saveProbeConfig()
     appendStatus(
         QStringLiteral("保存设备配置"),
         manager.saveLaserConfiguration(
-            static_cast<std::uint8_t>(programInput_->value()),
+            static_cast<std::uint8_t>(programInput_->currentData().toInt()),
             manager.laserProbeConfig()));
 }
 
@@ -282,12 +275,24 @@ void LaserDebugPage::disconnectLaser()
         otms::device::DeviceManager::instance().disconnectLaser());
 }
 
-void LaserDebugPage::selectLaserProgram()
+void LaserDebugPage::selectLaserProgram(int index)
 {
+    if (index < 0) {
+        return;
+    }
+
+    otms::device::DeviceManager& manager =
+        otms::device::DeviceManager::instance();
+    const otms::device::LaserStatus status = manager.selectLaserProgram(
+        static_cast<std::uint8_t>(programInput_->itemData(index).toInt()));
     appendStatus(
         QStringLiteral("切换程序"),
-        otms::device::DeviceManager::instance().selectLaserProgram(
-            static_cast<std::uint8_t>(programInput_->value())));
+        status);
+    if (!status.ok()) {
+        const QSignalBlocker blocker(programInput_);
+        programInput_->setCurrentIndex(
+            static_cast<int>(manager.laserProgramNumber()));
+    }
 }
 
 void LaserDebugPage::enableLaser()
@@ -383,13 +388,15 @@ void LaserDebugPage::measureLaserOnce()
 
 bool LaserDebugPage::applyProbeConfig()
 {
-    const otms::device::LaserProbeConfig config{
-        selectedOutput(),
-        scaleInput_->value(),
-        std::chrono::milliseconds(measurementTimeoutInput_->value()),
-        std::chrono::milliseconds(pollingIntervalInput_->value())};
-    const otms::device::LaserStatus status =
-        otms::device::DeviceManager::instance().configureLaserProbe(config);
+    otms::device::DeviceManager& manager =
+        otms::device::DeviceManager::instance();
+    otms::device::LaserProbeConfig config = manager.laserProbeConfig();
+    config.measurementOutput = selectedOutput();
+    config.measurementTimeout =
+        std::chrono::milliseconds(measurementTimeoutInput_->value());
+    config.pollingInterval =
+        std::chrono::milliseconds(pollingIntervalInput_->value());
+    const otms::device::LaserStatus status = manager.configureLaserProbe(config);
     if (!status.ok()) {
         appendStatus(QStringLiteral("配置测量参数"), status);
         return false;
@@ -415,7 +422,12 @@ void LaserDebugPage::appendStatus(
 void LaserDebugPage::showMeasurement(const otms::device::LaserMeasurement& measurement)
 {
     rawValue_->setText(QString::number(measurement.rawValue));
-    convertedValue_->setText(QStringLiteral("%1 μm").arg(measurement.valueMicrometers, 0, 'f', 6));
+    displayUnit_->setText(
+        QStringLiteral("%1 mm/count")
+            .arg(QString::number(measurement.displayUnitMillimeters, 'g', 12)));
+    measuredValue_->setText(
+        QStringLiteral("%1 mm")
+            .arg(QString::number(measurement.valueMillimeters, 'f', 6)));
     quality_->setText(qualityName(measurement.quality));
     judgment_->setText(judgmentName(measurement.judgment));
     triggerCount_->setText(QString::number(measurement.triggerCount));
@@ -438,6 +450,7 @@ void LaserDebugPage::updateControls()
     const bool connected = otms::device::DeviceManager::instance().isLaserConnected();
     connectButton_->setEnabled(!connected);
     disconnectButton_->setEnabled(connected);
+    programInput_->setEnabled(connected);
     for (QPushButton* control : connectedControls_) {
         control->setEnabled(connected);
     }

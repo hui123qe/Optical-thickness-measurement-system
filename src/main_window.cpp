@@ -230,7 +230,7 @@ void MainWindow::connectDeviceSignals(
         this, [this](const otms::device::LaserMeasurement& measurement) {
             const double measurementMillimeters =
                 measurement.quality == otms::device::MeasurementQuality::Valid
-                ? measurement.valueMicrometers / 1000.0
+                ? measurement.valueMillimeters
                 : std::numeric_limits<double>::quiet_NaN();
             topStatus_->setLaserMeasurementMillimeters(measurementMillimeters);
             if (std::isfinite(measurementMillimeters)) {
@@ -239,11 +239,14 @@ void MainWindow::connectDeviceSignals(
                 latestThicknessMillimeters_.reset();
             }
         });
+    connect(&deviceManager, &otms::device::DeviceManager::laserProgramChanged,
+        mainPage, &MainPage::setLaserProgramNumber);
 
     const bool laserConnected = deviceManager.isLaserConnected();
     rightStatus_->setProbeConnectionState(laserConnected);
     topStatus_->setLaserConnectionState(laserConnected);
     mainPage->setLaserConnectionState(laserConnected);
+    mainPage->setLaserProgramNumber(deviceManager.laserProgramNumber());
     taskExecutor_->setProbeReady(laserConnected);
 }
 
@@ -503,6 +506,18 @@ void MainWindow::connectMainPageActions(
             status.message,
             status.ok() ? QStringLiteral("waiting") : QStringLiteral("terminated"));
     });
+    connect(mainPage, &MainPage::laserProgramChangeRequested, this,
+        [this, mainPage, &deviceManager](std::uint8_t programNumber) {
+            const otms::device::LaserStatus status =
+                deviceManager.selectLaserProgram(programNumber);
+            if (!status.ok()) {
+                mainPage->setLaserProgramNumber(deviceManager.laserProgramNumber());
+            }
+            setTaskState(
+                status.ok() ? QStringLiteral("程序已切换") : QStringLiteral("无法切换程序"),
+                status.message,
+                status.ok() ? QStringLiteral("ready") : QStringLiteral("terminated"));
+        });
     connect(mainPage, &MainPage::stageAxisAbsoluteMoveRequested, this,
         [this](MotorAxis axis, double target) {
             if (measurementTaskController_->moveAxisAbsolute(logicalAxis(axis), target)) {

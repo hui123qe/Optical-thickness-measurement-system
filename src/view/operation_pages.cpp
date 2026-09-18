@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QStyle>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -129,7 +130,14 @@ QHBoxLayout* MainPage::createLaserMeasurementControls()
     stopLaserMeasurement_ = new QPushButton(QStringLiteral("停止测量"));
     laserMeasurementState_ =
         WidgetFactory::createStatusBadge(QStringLiteral("未测量"), QStringLiteral("offline"));
-    layout->addWidget(new QLabel(QStringLiteral("激光传感器")));
+    laserProgramSelector_ = new QComboBox;
+    for (int programNumber = 0; programNumber <= 7; ++programNumber) {
+        laserProgramSelector_->addItem(QString::number(programNumber), programNumber);
+    }
+    layout->addWidget(new QLabel(QStringLiteral("激光控制器")));
+    layout->addWidget(new QLabel(QStringLiteral("程序号")));
+    layout->addWidget(laserProgramSelector_);
+    layout->addSpacing(8);
     layout->addWidget(startLaserMeasurement_);
     layout->addWidget(stopLaserMeasurement_);
     layout->addSpacing(8);
@@ -141,6 +149,13 @@ QHBoxLayout* MainPage::createLaserMeasurementControls()
         this, &MainPage::laserMeasurementStartRequested);
     connect(stopLaserMeasurement_, &QPushButton::clicked,
         this, &MainPage::laserMeasurementStopRequested);
+    connect(laserProgramSelector_, &QComboBox::currentIndexChanged,
+        this, [this](int index) {
+            if (index >= 0) {
+                emit laserProgramChangeRequested(
+                    static_cast<std::uint8_t>(laserProgramSelector_->itemData(index).toInt()));
+            }
+        });
     updateLaserMeasurementControls();
     return layout;
 }
@@ -160,6 +175,16 @@ void MainPage::setLaserMeasurementState(bool measuring)
     updateLaserMeasurementControls();
 }
 
+void MainPage::setLaserProgramNumber(std::uint8_t programNumber)
+{
+    if (laserProgramSelector_ == nullptr || programNumber > 7) {
+        return;
+    }
+
+    const QSignalBlocker blocker(laserProgramSelector_);
+    laserProgramSelector_->setCurrentIndex(static_cast<int>(programNumber));
+}
+
 void MainPage::setAxisEnableState(MotorAxis axis, bool available, bool enabled)
 {
     if (manualControl_ != nullptr) {
@@ -171,12 +196,14 @@ void MainPage::updateLaserMeasurementControls()
 {
     if (startLaserMeasurement_ == nullptr
         || stopLaserMeasurement_ == nullptr
-        || laserMeasurementState_ == nullptr) {
+        || laserMeasurementState_ == nullptr
+        || laserProgramSelector_ == nullptr) {
         return;
     }
 
     startLaserMeasurement_->setEnabled(laserConnected_ && !laserMeasuring_);
     stopLaserMeasurement_->setEnabled(laserConnected_ && laserMeasuring_);
+    laserProgramSelector_->setEnabled(laserConnected_);
     laserMeasurementState_->setText(
         laserMeasuring_ ? QStringLiteral("测量中") : QStringLiteral("未测量"));
     laserMeasurementState_->setProperty(
