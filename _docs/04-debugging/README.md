@@ -10,3 +10,5 @@
   — `resolved / verified`，记录 `0xc0000005` CRT 启动崩溃的诊断证据、原因边界和 clean build 恢复方案。
 - [OTMS-DBG-002 圆环覆盖表格滚动条和箭头不能持续显示](circle-override-scrollbar-visibility.md)
   — `investigating / unverified`，记录 Qt 滚动条、原生箭头及父布局裁剪问题；外层滚动区方案已撤回。
+- [OTMS-DBG-003 物理设备 CL-3000 调试](physical-device-cl3000-debugging.md)
+  — `investigating / unverified`，记录物理控制器的网络、安装条件、感测头选择、外部端子、软控制、自动置零与测量数据含义。
