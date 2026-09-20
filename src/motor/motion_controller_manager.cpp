@@ -879,26 +879,6 @@ int MotionControllerManager::setDoorLocked(bool locked)
     return writeDigitalOutput(QStringLiteral("doorLock"), locked);
 }
 
-int MotionControllerManager::setStackLamp(StackLampColor color, bool enabled)
-{
-    QString logicalOutput;
-    switch (color) {
-    case StackLampColor::Red:
-        logicalOutput = QStringLiteral("redLamp");
-        break;
-    case StackLampColor::Yellow:
-        logicalOutput = QStringLiteral("yellowLamp");
-        break;
-    case StackLampColor::Green:
-        logicalOutput = QStringLiteral("greenLamp");
-        break;
-    }
-
-    qCInfo(motionControllerManagerLog)
-        << "Setting stack lamp" << logicalOutput << enabled;
-    return writeDigitalOutput(logicalOutput, enabled);
-}
-
 bool MotionControllerManager::cncBegin(LogicalAxis logicalAxis)
 {
     std::shared_lock registryLock(registryMutex_);

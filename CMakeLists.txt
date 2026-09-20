@@ -83,6 +83,8 @@ qt_add_executable(OpticalThicknessUi
     src/device/device_manager.h
     src/device/device_runtime_settings.cpp
     src/device/device_runtime_settings.h
+    src/device/stack_light_device.cpp
+    src/device/stack_light_device.h
     src/view/automatic_operation_widget.cpp
     src/view/automatic_operation_widget.h
     src/view/status_widgets.cpp

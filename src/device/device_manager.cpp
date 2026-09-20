@@ -462,6 +462,70 @@ LaserStatus DeviceManager::stopLaserMeasurement()
     return status;
 }
 
+LaserStatus DeviceManager::startLaserMeasurementSession()
+{
+    qCInfo(deviceManagerLog) << "Starting laser measurement session";
+    const LaserStatus enableStatus = enableLaser();
+    if (!enableStatus.ok()) {
+        return enableStatus;
+    }
+
+    const LaserStatus measurementStatus = startLaserMeasurement();
+    if (measurementStatus.ok()) {
+        return LaserStatus{
+            0,
+            QStringLiteral("激光已开启，测量已启动。")};
+    }
+
+    qCCritical(deviceManagerLog).noquote()
+        << QStringLiteral("启动测量失败，正在关闭已开启的激光：%1")
+               .arg(measurementStatus.message);
+    const LaserStatus rollbackStatus = disableLaser();
+    LaserStatus result = measurementStatus;
+    if (rollbackStatus.ok()) {
+        result.message = QStringLiteral("启动测量失败，已关闭激光：%1")
+                             .arg(measurementStatus.message);
+        return result;
+    }
+
+    qCCritical(deviceManagerLog).noquote()
+        << QStringLiteral("启动测量失败后的激光关闭回滚也失败：%1")
+               .arg(rollbackStatus.message);
+    result.message = QStringLiteral("启动测量失败，且关闭激光回滚失败：%1；%2")
+                         .arg(measurementStatus.message, rollbackStatus.message);
+    return result;
+}
+
+LaserStatus DeviceManager::stopLaserMeasurementSession()
+{
+    qCInfo(deviceManagerLog) << "Stopping laser measurement session";
+    const LaserStatus measurementStatus = stopLaserMeasurement();
+    const LaserStatus disableStatus = disableLaser();
+
+    if (measurementStatus.ok() && disableStatus.ok()) {
+        return LaserStatus{
+            0,
+            QStringLiteral("测量已停止，激光已关闭。")};
+    }
+    if (!measurementStatus.ok() && disableStatus.ok()) {
+        LaserStatus result = measurementStatus;
+        result.message = QStringLiteral("停止测量失败，但激光已关闭：%1")
+                             .arg(measurementStatus.message);
+        return result;
+    }
+    if (measurementStatus.ok()) {
+        LaserStatus result = disableStatus;
+        result.message = QStringLiteral("测量已停止，但关闭激光失败：%1")
+                             .arg(disableStatus.message);
+        return result;
+    }
+
+    LaserStatus result = measurementStatus;
+    result.message = QStringLiteral("停止测量和关闭激光均失败：%1；%2")
+                         .arg(measurementStatus.message, disableStatus.message);
+    return result;
+}
+
 void DeviceManager::setLaserMeasurementState(bool measuring)
 {
     if (laserMeasuring_ == measuring) {

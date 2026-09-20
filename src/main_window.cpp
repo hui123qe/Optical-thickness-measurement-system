@@ -3,6 +3,7 @@
 #include "motor/motion_controller_manager.h"
 
 #include "device/device_manager.h"
+#include "device/stack_light_device.h"
 #include "workflow/measurement_task_controller.h"
 #include "workflow/task_executor.h"
 #include "view/debug_page.h"
@@ -143,7 +144,9 @@ QString taskExecutionStyleClass(
 
 } // namespace
 
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(
+    otms::device::StackLightDevice& stackLight,
+    QWidget* parent)
     : QMainWindow(parent)
 {
     setObjectName(QStringLiteral("MainWindow"));
@@ -194,6 +197,7 @@ MainWindow::MainWindow(QWidget* parent)
         *taskExecutor_,
         motionControllers,
         deviceManager,
+        stackLight,
         this);
 
     connectWorkflowSignals(mainPage, logPage);
@@ -493,14 +497,16 @@ void MainWindow::connectMainPageActions(
         });
     connect(mainPage, &MainPage::taskTerminationRequested, taskExecutor_, &TaskExecutor::terminate);
     connect(mainPage, &MainPage::laserMeasurementStartRequested, this, [this, &deviceManager] {
-        const otms::device::LaserStatus status = deviceManager.startLaserMeasurement();
+        const otms::device::LaserStatus status =
+            deviceManager.startLaserMeasurementSession();
         setTaskState(
             status.ok() ? QStringLiteral("测量已启动") : QStringLiteral("无法启动测量"),
             status.message,
             status.ok() ? QStringLiteral("ready") : QStringLiteral("terminated"));
     });
     connect(mainPage, &MainPage::laserMeasurementStopRequested, this, [this, &deviceManager] {
-        const otms::device::LaserStatus status = deviceManager.stopLaserMeasurement();
+        const otms::device::LaserStatus status =
+            deviceManager.stopLaserMeasurementSession();
         setTaskState(
             status.ok() ? QStringLiteral("测量已停止") : QStringLiteral("无法停止测量"),
             status.message,

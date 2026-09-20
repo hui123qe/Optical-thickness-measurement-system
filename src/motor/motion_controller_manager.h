@@ -21,13 +21,6 @@ enum class LogicalAxis
     Z
 };
 
-enum class StackLampColor
-{
-    Red,
-    Yellow,
-    Green
-};
-
 class MotionControllerManager
 {
 public:
@@ -92,11 +85,11 @@ public:
     int readDigitalInput(int logicalInput, bool& value) const;
     int readDigitalOutput(int logicalOutput, bool& value) const;
     int writeDigitalOutput(int logicalOutput, bool value);
+    int writeDigitalOutput(const QString& logicalOutput, bool value);
 
     int readDoorLocked(bool& locked) const;
     int readLightCurtainClear(bool& clear) const;
     int setDoorLocked(bool locked);
-    int setStackLamp(StackLampColor color, bool enabled);
 
     bool cncBegin(LogicalAxis logicalAxis);
     bool cncClearBuffer(LogicalAxis logicalAxis);
@@ -146,7 +139,6 @@ private:
     [[nodiscard]] const AxisMapping* axisMappingFor(LogicalAxis logicalAxis) const;
     int readDigitalInput(const QString& logicalInput, bool& value) const;
     int readDigitalOutput(const QString& logicalOutput, bool& value) const;
-    int writeDigitalOutput(const QString& logicalOutput, bool value);
     static bool withinSoftLimit(const AxisMapping& mapping, double position);
     static bool toCounts(double value, double countsPerUnit, int& counts);
     static double fromCounts(int counts, double countsPerUnit);

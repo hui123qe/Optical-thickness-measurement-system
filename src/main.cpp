@@ -1,6 +1,7 @@
 #include "application_logger.h"
 #include "device/device_manager.h"
 #include "device/device_runtime_settings.h"
+#include "device/stack_light_device.h"
 #include "main_window.h"
 #include "motor/motion_controller_manager.h"
 #include "view/application_style.h"
@@ -44,9 +45,13 @@ int main(int argc, char* argv[])
         }
     }
 
-    MainWindow window;
+    otms::device::StackLightDevice stackLight(motionControllers);
+    stackLight.showNormal();
+
+    MainWindow window(stackLight);
     window.show();
     const int exitCode = application.exec();
+    stackLight.turnOff();
     motionControllers.shutdown();
     otms::shutdownApplicationLogging();
     return exitCode;

@@ -38,6 +38,8 @@ public:
     LaserStatus disableLaser();
     LaserStatus startLaserMeasurement();
     LaserStatus stopLaserMeasurement();
+    LaserStatus startLaserMeasurementSession();
+    LaserStatus stopLaserMeasurementSession();
     LaserStatus setLaserZero(LaserOutput output);
     LaserStatus clearLaserZero(LaserOutput output);
     LaserStatus resetLaserOutput(LaserOutput output);

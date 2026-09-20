@@ -13,6 +13,7 @@
 
 namespace otms::device {
 class DeviceManager;
+class StackLightDevice;
 }
 
 class MeasurementTaskController final : public QObject
@@ -25,6 +26,7 @@ public:
         TaskExecutor& executor,
         otms::device::MotionControllerManager& motionControllers,
         otms::device::DeviceManager& devices,
+        otms::device::StackLightDevice& stackLight,
         QObject* parent = nullptr);
 
     [[nodiscard]] otms::workflow::MachineState machineState() const;
@@ -131,6 +133,7 @@ private:
     TaskExecutor& executor_;
     otms::device::MotionControllerManager& motionControllers_;
     otms::device::DeviceManager& devices_;
+    otms::device::StackLightDevice& stackLight_;
     MeasurementDatabase database_;
     QTimer arrivalPollTimer_;
     QTimer motorStatusPollTimer_;

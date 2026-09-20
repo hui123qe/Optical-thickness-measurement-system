@@ -19,12 +19,15 @@ class TopStatusWidget;
 
 namespace otms::device {
 class DeviceManager;
+class StackLightDevice;
 }
 
 class MainWindow final : public QMainWindow
 {
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(
+        otms::device::StackLightDevice& stackLight,
+        QWidget* parent = nullptr);
 
 private:
     void connectDeviceSignals(

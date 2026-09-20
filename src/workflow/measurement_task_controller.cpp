@@ -1,6 +1,7 @@
 #include "measurement_task_controller.h"
 
 #include "../device/device_manager.h"
+#include "../device/stack_light_device.h"
 #include "../motor/motion_controller_manager.h"
 
 #include <cmath>
@@ -83,12 +84,14 @@ MeasurementTaskController::MeasurementTaskController(
     TaskExecutor& executor,
     otms::device::MotionControllerManager& motionControllers,
     otms::device::DeviceManager& devices,
+    otms::device::StackLightDevice& stackLight,
     QObject* parent)
     : QObject(parent)
     , workflowPolicy_(workflowPolicy)
     , executor_(executor)
     , motionControllers_(motionControllers)
     , devices_(devices)
+    , stackLight_(stackLight)
 {
     arrivalPollTimer_.setInterval(ArrivalPollIntervalMs);
     arrivalPollTimer_.setTimerType(Qt::PreciseTimer);
@@ -819,6 +822,11 @@ void MeasurementTaskController::setMachineState(otms::workflow::MachineState sta
     qCInfo(measurementWorkflowLog)
         << "Machine state changed"
         << machineStateName(previousState) << "->" << machineStateName(machineState_);
+    if (machineState_ == otms::workflow::MachineState::Fault) {
+        stackLight_.showFault();
+    } else {
+        stackLight_.showNormal();
+    }
     emit machineStateChanged(machineState_);
 }
 
