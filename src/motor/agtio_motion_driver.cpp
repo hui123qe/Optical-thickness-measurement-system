@@ -159,6 +159,20 @@ int AgtioMotionController::getMotionStatus(int axis, int& status) const
     return hasController() ? GetMotionStat(controllerId_, axis, status) : 0;
 }
 
+int AgtioMotionController::getMotorFault(int axis, MotorFault& fault) const
+{
+    if (!hasController()) {
+        return 0;
+    }
+
+    int faultCode = 0;
+    const int result = GetConFlt(controllerId_, axis, faultCode);
+    if (result == 1) {
+        fault = static_cast<MotorFault>(faultCode);
+    }
+    return result;
+}
+
 int AgtioMotionController::setSpeed(int axis, int speedCountsPerSecond)
 {
     if (!hasController()) {

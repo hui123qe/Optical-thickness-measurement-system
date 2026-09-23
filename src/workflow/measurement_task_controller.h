@@ -116,6 +116,10 @@ private:
     [[nodiscard]] bool runningConditionsMet() const;
     [[nodiscard]] QString runningConditionFailureReason() const;
     [[nodiscard]] QString safetyConditionFailureReason() const;
+    [[nodiscard]] static QString motorFaultName(otms::device::MotorFault fault);
+    bool checkMotorFault(
+        otms::device::LogicalAxis axis,
+        bool& previousStateAvailable);
     [[nodiscard]] bool zAxisTargetAllowed(double targetPosition) const;
     [[nodiscard]] QString zAxisSoftLimitDetail(double position, const QString& action) const;
     void updateStateFromConditions();
@@ -155,6 +159,9 @@ private:
     bool xAxisEnabled_{};
     bool yAxisEnabled_{};
     bool zAxisEnabled_{};
+    bool xAxisFaultStateAvailable_{true};
+    bool yAxisFaultStateAvailable_{true};
+    bool zAxisFaultStateAvailable_{true};
     bool probeReady_{};
     bool doorLockStateAvailable_{};
     bool doorLocked_{};

@@ -198,6 +198,16 @@ int VirtualMotionController::getMotionStatus(int axis, int& status) const
     return 1;
 }
 
+int VirtualMotionController::getMotorFault(int axis, MotorFault& fault) const
+{
+    std::scoped_lock lock(stateMutex_);
+    if (!connected_ || !validAxis(axis)) {
+        return 0;
+    }
+    fault = MotorFault::None;
+    return 1;
+}
+
 int VirtualMotionController::setSpeed(int axis, int speedCountsPerSecond)
 {
     std::scoped_lock lock(stateMutex_);

@@ -738,6 +738,18 @@ int MotionControllerManager::getMotionStatus(LogicalAxis logicalAxis, int& statu
     return entry->controller->getMotionStatus(mapping->controllerAxis, status);
 }
 
+int MotionControllerManager::getMotorFault(LogicalAxis logicalAxis, MotorFault& fault) const
+{
+    std::shared_lock registryLock(registryMutex_);
+    const AxisMapping* mapping = axisMappingFor(logicalAxis);
+    ControllerEntry* entry = mapping ? controllerFor(mapping->controllerId) : nullptr;
+    if (!entry) {
+        return 0;
+    }
+    std::scoped_lock commandLock(entry->commandMutex);
+    return entry->controller->getMotorFault(mapping->controllerAxis, fault);
+}
+
 bool MotionControllerManager::axisSoftLimit(
     LogicalAxis logicalAxis,
     double& minimum,

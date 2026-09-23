@@ -68,6 +68,7 @@ public:
     int getReferencePosition(LogicalAxis logicalAxis, double& position) const;
     int getVelocity(LogicalAxis logicalAxis, double& unitsPerSecond) const;
     int getMotionStatus(LogicalAxis logicalAxis, int& status) const;
+    int getMotorFault(LogicalAxis logicalAxis, MotorFault& fault) const;
     [[nodiscard]] bool axisSoftLimit(
         LogicalAxis logicalAxis,
         double& minimum,

@@ -535,6 +535,20 @@ void MeasurementTaskController::pollMotorStatus()
         && yConnected != 0
         && zConnected != 0;
 
+    if (connected && machineState_ != otms::workflow::MachineState::Fault) {
+        if (checkMotorFault(
+                otms::device::LogicalAxis::X,
+                xAxisFaultStateAvailable_)
+            || checkMotorFault(
+                otms::device::LogicalAxis::Y,
+                yAxisFaultStateAvailable_)
+            || checkMotorFault(
+                otms::device::LogicalAxis::Z,
+                zAxisFaultStateAvailable_)) {
+            return;
+        }
+    }
+
     double xPosition = 0.0;
     double yPosition = 0.0;
     double zPosition = 0.0;
@@ -612,6 +626,106 @@ void MeasurementTaskController::pollMotorStatus()
 
     pollSafetyIo();
     updateStateFromConditions();
+}
+
+QString MeasurementTaskController::motorFaultName(otms::device::MotorFault fault)
+{
+    using otms::device::MotorFault;
+    switch (fault) {
+    case MotorFault::None:
+        return QStringLiteral("无故障");
+    case MotorFault::AbortDetected:
+        return QStringLiteral("检测到中止");
+    case MotorFault::MotorPhaseGroundShort:
+        return QStringLiteral("电机相对地短路");
+    case MotorFault::EncoderDisconnected:
+        return QStringLiteral("编码器断开");
+    case MotorFault::FpgaWatchdog:
+        return QStringLiteral("FPGA 看门狗故障");
+    case MotorFault::PwmDeadTimeTooShort:
+        return QStringLiteral("PWM 死区时间过短");
+    case MotorFault::HallDisconnected:
+        return QStringLiteral("霍尔传感器断开");
+    case MotorFault::MotorStuck:
+        return QStringLiteral("电机堵转");
+    case MotorFault::BusVoltageHigh:
+        return QStringLiteral("母线电压过高");
+    case MotorFault::BusVoltageLow:
+        return QStringLiteral("母线电压过低");
+    case MotorFault::LogicVoltageHigh:
+        return QStringLiteral("逻辑电压过高");
+    case MotorFault::LogicVoltageLow:
+        return QStringLiteral("逻辑电压过低");
+    case MotorFault::BusCurrentHigh:
+        return QStringLiteral("母线电流过高");
+    case MotorFault::PhaseACurrentHigh:
+        return QStringLiteral("A 相电流过高");
+    case MotorFault::PhaseBCurrentHigh:
+        return QStringLiteral("B 相电流过高");
+    case MotorFault::PhaseCCurrentHigh:
+        return QStringLiteral("C 相电流过高");
+    case MotorFault::MotorCurrentHigh:
+        return QStringLiteral("电机电流过高");
+    case MotorFault::DriverPowerLimit:
+        return QStringLiteral("驱动器功率受限");
+    case MotorFault::IpmTemperatureHigh:
+        return QStringLiteral("IPM 温度过高");
+    case MotorFault::VelocityHigh:
+        return QStringLiteral("速度过高");
+    case MotorFault::PositionErrorLimit:
+        return QStringLiteral("位置误差超限");
+    case MotorFault::VelocityErrorLimit:
+        return QStringLiteral("速度误差超限");
+    case MotorFault::CpuTemperatureHigh:
+        return QStringLiteral("CPU 温度过高");
+    case MotorFault::BusVoltageAbsoluteLimit:
+        return QStringLiteral("母线电压绝对值超限");
+    case MotorFault::Sto1Activated:
+        return QStringLiteral("STO1 已触发");
+    case MotorFault::OverCurrent:
+        return QStringLiteral("过电流");
+    case MotorFault::AuxiliaryEncoderDisconnected:
+        return QStringLiteral("辅助编码器断开");
+    case MotorFault::IpmFault:
+        return QStringLiteral("IPM 故障");
+    case MotorFault::EncoderTypeUnsupported:
+        return QStringLiteral("不支持的编码器类型");
+    case MotorFault::AuxEncoderTypeUnsupported:
+        return QStringLiteral("不支持的辅助编码器类型");
+    }
+    return QStringLiteral("未知电机故障");
+}
+
+bool MeasurementTaskController::checkMotorFault(
+    otms::device::LogicalAxis axis,
+    bool& previousStateAvailable)
+{
+    otms::device::MotorFault fault = otms::device::MotorFault::None;
+    const bool stateAvailable = motionControllers_.getMotorFault(axis, fault) == 1;
+    if (!stateAvailable) {
+        if (previousStateAvailable) {
+            qCWarning(measurementWorkflowLog).noquote()
+                << QStringLiteral("读取 %1 轴电机故障状态失败。").arg(axisName(axis));
+        }
+        previousStateAvailable = false;
+        return false;
+    }
+
+    if (!previousStateAvailable) {
+        qCInfo(measurementWorkflowLog).noquote()
+            << QStringLiteral("%1 轴电机故障状态读取已恢复。").arg(axisName(axis));
+    }
+    previousStateAvailable = true;
+    if (fault == otms::device::MotorFault::None) {
+        return false;
+    }
+
+    const int faultCode = static_cast<int>(fault);
+    enterMachineFault(
+        QStringLiteral("%1 轴电机故障：%2（错误码 %3）。")
+            .arg(axisName(axis), motorFaultName(fault))
+            .arg(faultCode));
+    return true;
 }
 
 void MeasurementTaskController::pollSafetyIo()

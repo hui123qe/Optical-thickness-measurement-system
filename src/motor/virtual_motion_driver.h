@@ -36,6 +36,7 @@ public:
     int getPosition(int axis, int& positionCounts) const override;
     int getVelocity(int axis, int& velocityCountsPerSecond) const override;
     int getMotionStatus(int axis, int& status) const override;
+    int getMotorFault(int axis, MotorFault& fault) const override;
 
     int setSpeed(int axis, int speedCountsPerSecond) override;
     int jog(int axis, int velocityCountsPerSecond) override;

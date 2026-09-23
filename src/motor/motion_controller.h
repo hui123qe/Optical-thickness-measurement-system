@@ -2,6 +2,40 @@
 
 namespace otms::device {
 
+enum class MotorFault
+{
+    None = 0,
+    AbortDetected = 1001,
+    MotorPhaseGroundShort = 1002,
+    EncoderDisconnected = 1003,
+    FpgaWatchdog = 1004,
+    PwmDeadTimeTooShort = 1005,
+    HallDisconnected = 1006,
+    MotorStuck = 1007,
+    BusVoltageHigh = 1008,
+    BusVoltageLow = 1009,
+    LogicVoltageHigh = 1010,
+    LogicVoltageLow = 1011,
+    BusCurrentHigh = 1012,
+    PhaseACurrentHigh = 1013,
+    PhaseBCurrentHigh = 1014,
+    PhaseCCurrentHigh = 1015,
+    MotorCurrentHigh = 1016,
+    DriverPowerLimit = 1017,
+    IpmTemperatureHigh = 1018,
+    VelocityHigh = 1019,
+    PositionErrorLimit = 1020,
+    VelocityErrorLimit = 1021,
+    CpuTemperatureHigh = 1022,
+    BusVoltageAbsoluteLimit = 1023,
+    Sto1Activated = 1024,
+    OverCurrent = 1025,
+    AuxiliaryEncoderDisconnected = 1026,
+    IpmFault = 1027,
+    EncoderTypeUnsupported = 1028,
+    AuxEncoderTypeUnsupported = 1029
+};
+
 class IMotionController
 {
 public:
@@ -32,6 +66,7 @@ public:
     virtual int getPosition(int axis, int& positionCounts) const = 0;
     virtual int getVelocity(int axis, int& velocityCountsPerSecond) const = 0;
     virtual int getMotionStatus(int axis, int& status) const = 0;
+    virtual int getMotorFault(int axis, MotorFault& fault) const = 0;
 
     virtual int setSpeed(int axis, int speedCountsPerSecond) = 0;
     virtual int jog(int axis, int velocityCountsPerSecond) = 0;
